@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Stroke Recorder</title>
+
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+    }
+
+    canvas {
+      border: 1px solid #888;
+      touch-action: none;
+      cursor: crosshair;
+    }
+
+    button {
+      margin-top: 10px;
+      margin-right: 5px;
+      padding: 8px 14px;
+    }
+
+    #info {
+      margin-top: 10px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h2>Stroke Recorder</h2>
+
+  <canvas id="canvas" width="600" height="400"></canvas>
+
+  <br>
+
+  <button id="clear">Clear</button>
+  <button id="dump">Show Data</button>
+
+  <div id="info"></div>
+
+<script>
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+let strokes = [];
+let currentStroke = null;
+let recording = false;
+let count = 0;
+let startTime = 0;
+let last_pos = {x:0, y:0}
+let last_t = 0;
+
+
+// --------------------------------------------------
+// Get mouse/touch position relative to canvas
+// --------------------------------------------------
+
+function getPosition(event) {
+
+  const rect = canvas.getBoundingClientRect();
+
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top
+  };
+}
+
+function angle(dx, dy) {
+	return Math.atan2(dy, dx);
+}
+
+// --------------------------------------------------
+// Start a new stroke
+// --------------------------------------------------
+
+canvas.addEventListener("pointerdown", event => {
+
+  event.preventDefault();
+
+  // Capture pointer so we continue receiving events
+  // even if the pointer leaves the canvas.
+  canvas.setPointerCapture(event.pointerId);
+
+  recording = true;
+  count = 1
+
+  startTime = performance.now();
+
+  currentStroke = [];
+
+  const pos = getPosition(event);
+
+  currentStroke.push({
+    x: pos.x,
+    y: pos.y,
+    rate: null,
+    angle: null
+  });
+
+  // Start drawing
+  ctx.beginPath();
+  ctx.moveTo(pos.x, pos.y);
+});
+
+
+// --------------------------------------------------
+// Record positions while pointer is moving
+// --------------------------------------------------
+
+canvas.addEventListener("pointermove", event => {
+
+  if (!recording)
+    return;
+  count += 1
+  if (count <= 2)
+    return
+
+  event.preventDefault();
+
+  const pos = getPosition(event);
+
+  const t = performance.now() - startTime;
+  const dt = t - last_t
+  const dx = pos.x - last_pos.x 
+  const dy = pos.y - last_pos.y
+  const dp = Math.sqrt(dx**2 + dy**2)
+  const rate = dp/dt
+  const a = angle(dx, dy)
+
+  last_pos.x = pos.x
+  last_pos.y = pos.y
+  last_t = t
+
+  // Draw the stroke
+  ctx.lineTo(pos.x, pos.y);
+  ctx.stroke();
+  // avoid early data or no movement events 
+  if (count <= 3 || !rate)
+    return;
+
+  currentStroke.push({
+    x: pos.x,
+    y: pos.y,
+    rate,
+    angle: a
+  });
+});
+
+
+// --------------------------------------------------
+// Finish the stroke
+// --------------------------------------------------
+
+canvas.addEventListener("pointerup", event => {
+
+  if (!recording)
+    return;
+
+  recording = false;
+
+  last_pos.x = 0
+  last_pos.y = 0
+  last_t = 0
+
+  strokes.push(currentStroke);
+
+  currentStroke = null;
+
+  updateInfo();
+});
+
+
+// Also finish if pointer is cancelled
+canvas.addEventListener("pointercancel", () => {
+
+  if (!recording)
+    return;
+
+  recording = false;
+
+  if (currentStroke && currentStroke.length > 0) {
+    strokes.push(currentStroke);
+  }
+
+  currentStroke = null;
+
+  updateInfo();
+});
+
+
+// --------------------------------------------------
+// Canvas drawing setup
+// --------------------------------------------------
+
+ctx.lineWidth = 3;
+ctx.lineCap = "round";
+ctx.lineJoin = "round";
+
+
+// --------------------------------------------------
+// Clear
+// --------------------------------------------------
+
+document.getElementById("clear").addEventListener("click", () => {
+
+  strokes = [];
+  currentStroke = null;
+  recording = false;
+
+  ctx.clearRect(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  updateInfo();
+});
+
+
+// --------------------------------------------------
+// Show recorded data
+// --------------------------------------------------
+
+document.getElementById("dump").addEventListener("click", () => {
+
+  console.log(strokes);
+
+  document.getElementById("info").textContent =
+    JSON.stringify(strokes, null, 2);
+});
+
+
+// --------------------------------------------------
+// Update status
+// --------------------------------------------------
+
+function updateInfo() {
+
+  const pointCount = strokes.reduce(
+    (total, stroke) => total + stroke.length,
+    0
+  );
+
+  document.getElementById("info").textContent =
+    `${strokes.length} strokes, ${pointCount} points`;
+}
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Canvas → G‑Code (150×100mm)</title>
+  <style>
+    :root{
+      --bg:#0b1020; --panel:#121933; --accent:#6ee7ff; --text:#e8eefc; --muted:#a8b3d1;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);}
+    header{display:flex;gap:.75rem;align-items:center;padding:12px 16px;background:linear-gradient(180deg,#121a36,#0e1430);position:sticky;top:0;z-index:5;border-bottom:1px solid #1e2a55}
+    .btn{background:#1b2652;border:1px solid #2a3a77;color:var(--text);padding:.5rem .75rem;border-radius:.6rem;cursor:pointer}
+    .btn:hover{background:#22306b}
+    .btn[aria-pressed="true"]{outline:2px solid var(--accent)}
+    .danger{background:#3a1730;border-color:#6a2a55}
+    .danger:hover{background:#4a1b3e}
+    .ghost{background:transparent;border-color:#2a3a77}
+    .row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+    .grow{flex:1 1 auto}
+    .panel{display:grid;grid-template-columns: 1fr 320px; gap:12px; padding:12px}
+    .card{background:var(--panel); border:1px solid #1e2a55; border-radius:14px; padding:12px}
+    canvas{background:#0f1735;border:1px solid #1e2a55;border-radius:12px;touch-action:none; display:block; width:100%; height:auto}
+    label{color:var(--muted);font-size:.9rem}
+    input[type=range]{width:180px}
+    .kbd{border:1px solid #2a3a77;border-bottom-width:3px;border-radius:6px;padding:.1rem .4rem;font-family:ui-monospace,Consolas,Menlo,monospace;color:#cfe4ff}
+    .list{max-height:200px;overflow:auto;border:1px dashed #2a3a77;border-radius:10px;padding:6px}
+    .list div{padding:6px;border-radius:8px;cursor:pointer}
+    .list div.active{outline:2px solid var(--accent)}
+    code, pre{background:#0a1129;border:1px solid #1e2a55;border-radius:10px;padding:8px;color:#cfe4ff}
+    footer{padding:10px 16px;color:#9fb0d7}
+  </style>
+</head>
+<body>
+  <header class="row">
+    <button id="toolDraw" class="btn" aria-pressed="true" title="Draw (D)">✏️ Draw</button>
+    <button id="toolSelect" class="btn" aria-pressed="false" title="Select/Delete (S)">🧹 Select/Delete</button>
+    <div class="row">
+      <label for="width">Stroke</label>
+      <input id="width" type="range" min="1" max="12" value="3"/>
+      <output id="widthOut">3 px</output>
+    </div>
+    <div class="row">
+      <label for="feed">Feed (F)</label>
+      <input id="feed" type="number" min="10" max="10000" step="10" value="800" style="width:100px"/>
+    </div>
+    <div class="row">
+      <label for="pointStep">Point step</label>
+      <input id="pointStep" type="range" min="0" max="8" step="0.5" value="1.5"/>
+      <output id="pointStepOut">1.5 px</output>
+    </div>
+    <span class="grow"></span>
+    <button id="undo" class="btn ghost" title="Undo (Ctrl+Z)">↶ Undo</button>
+    <button id="clear" class="btn danger" title="Clear all">🗑️ Clear</button>
+    <button id="export" class="btn" title="Export G-code">⬇️ Export G‑code</button>
+  </header>
+
+  <main class="panel">
+    <section class="card">
+      <!-- Canvas is set so that its pixel width maps to 150mm and height to 100mm -->
+      <canvas id="canvas" width="900" height="600"></canvas>
+    </section>
+
+    <aside class="card">
+      <h3 style="margin:.25rem 0 0">Workspace</h3>
+      <p style="margin:.25rem 0 .5rem;color:#9fb0d7">Canvas maps to <strong>150×100 mm</strong>. Safe Z: <strong>5 mm</strong>. Mark Z profile: 0 → 4 mm (first 25%), hold 4 mm (25–75%), 4 → 0 mm (last 25%).</p>
+
+      <div class="row" style="margin:.5rem 0 .5rem">
+        <div>
+          <label>Mode</label>
+          <div class="row">
+            <span class="kbd">D</span> draw &nbsp; <span class="kbd">S</span> select &nbsp; <span class="kbd">Del</span> delete
+          </div>
+        </div>
+      </div>
+
+      <h4 style="margin:.75rem 0 .25rem">Marks</h4>
+      <div id="marks" class="list" aria-label="List of marks"></div>
+
+      <h4 style="margin:.75rem 0 .25rem">Notes</h4>
+      <ul style="margin:.25rem 0 .25rem 1rem; color:#9fb0d7">
+        <li>Nearest‑stroke click to select, then press <span class="kbd">Delete</span> or use <em>Select/Delete</em>.</li>
+        <li>Undo removes the last stroke you drew.</li>
+        <li>Point step controls how densely points are captured while drawing.</li>
+      </ul>
+
+      <h4 style="margin:.75rem 0 .25rem">G‑Code format</h4>
+      <pre><code>G21  ; mm
+G90  ; absolute
+G0 Z5
+; for each mark
+G0 X.. Y..
+G1 Z0 F...
+G1 X.. Y.. Z.. F...
+...
+G0 Z5</code></pre>
+    </aside>
+  </main>
+
+  <footer>
+    Tip: The canvas is <em>900×600 px</em>, mapping to <em>150×100 mm</em> ⇒ <strong>0.1667 mm/px</strong>.
+  </footer>
+
+  <script>
+    // === Geometry helpers ===
+    const dist2 = (a,b)=>{const dx=a.x-b.x, dy=a.y-b.y; return dx*dx+dy*dy};
+    const lerp = (a,b,t)=>a+(b-a)*t;
+
+    function pointLineDistance(p,a,b){
+      // distance from point p to segment ab
+      const vx=b.x-a.x, vy=b.y-a.y;
+      const wx=p.x-a.x, wy=p.y-a.y;
+      const c1= vx*wx+vy*wy;
+      if(c1<=0) return Math.sqrt(dist2(p,a));
+      const c2= vx*vx+vy*vy;
+      if(c2<=c1) return Math.sqrt(dist2(p,b));
+      const t=c1/c2;
+      const proj={x:a.x+t*vx, y:a.y+t*vy};
+      return Math.sqrt(dist2(p,proj));
+    }
+
+    function cumulativeLengths(points){
+      const L=[0];
+      for(let i=1;i<points.length;i++){
+        const dx=points[i].x-points[i-1].x;
+        const dy=points[i].y-points[i-1].y;
+        L[i]=L[i-1]+Math.hypot(dx,dy);
+      }
+      return {L, total:L[L.length-1]||0};
+    }
+
+    // === App State ===
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const marksDiv = document.getElementById('marks');
+
+    const MM_W = 150, MM_H = 100; // machine work area (mm)
+    const mmPerPxX = MM_W / canvas.width;  // 150 / 900 = 0.1667 mm/px
+    const mmPerPxY = MM_H / canvas.height; // 100 / 600 = 0.1667 mm/px
+
+    let tool = 'draw'; // 'draw' | 'select'
+    let strokes = [];   // {id, width, points:[{x,y}], selected:false}
+    let selectedId = null;
+
+    let drawing = false;
+    let lastPt = null;
+    let pointStep = 1.5; // pixels between captured points
+
+    // === UI wiring ===
+    const el = id => document.getElementById(id);
+    const toolDraw = el('toolDraw');
+    const toolSelect = el('toolSelect');
+    const widthInput = el('width');
+    const widthOut = el('widthOut');
+    const feedInput = el('feed');
+    const exportBtn = el('export');
+    const undoBtn = el('undo');
+    const clearBtn = el('clear');
+    const pointStepInput = el('pointStep');
+    const pointStepOut = el('pointStepOut');
+
+    function setTool(next){
+      tool = next;
+      toolDraw.setAttribute('aria-pressed', tool==='draw');
+      toolSelect.setAttribute('aria-pressed', tool==='select');
+      canvas.style.cursor = tool==='draw' ? 'crosshair' : 'pointer';
+    }
+
+    toolDraw.onclick = ()=> setTool('draw');
+    toolSelect.onclick = ()=> setTool('select');
+
+    widthInput.addEventListener('input', ()=>{
+      widthOut.textContent = widthInput.value + ' px';
+    });
+    pointStepInput.addEventListener('input', ()=>{
+      pointStep = parseFloat(pointStepInput.value);
+      pointStepOut.textContent = pointStep + ' px';
+    });
+
+    undoBtn.onclick = ()=>{ if(strokes.length){ strokes.pop(); selectedId=null; drawAll(); refreshList(); }};
+    clearBtn.onclick = ()=>{ if(confirm('Clear all marks?')){ strokes=[]; selectedId=null; drawAll(); refreshList(); } };
+
+    exportBtn.onclick = ()=>{
+      const g = generateGCode(strokes, parseFloat(feedInput.value)||800);
+      downloadText(g, 'canvas_export.gcode');
+    };
+
+    document.addEventListener('keydown', (e)=>{
+      if(e.key==='d' || e.key==='D'){ setTool('draw'); }
+      else if(e.key==='s' || e.key==='S'){ setTool('select'); }
+      else if(e.key==='Delete') { deleteSelected(); }
+      else if((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='z'){ e.preventDefault(); undoBtn.click(); }
+    });
+
+    // === Drawing ===
+    canvas.addEventListener('pointerdown', (e)=>{
+      const pos = getPos(e);
+      if(tool==='draw'){
+        drawing = true; canvas.setPointerCapture(e.pointerId);
+        const stroke = { id: crypto.randomUUID(), width: parseFloat(widthInput.value)|0 || 3, points:[pos], selected:false };
+        strokes.push(stroke);
+        lastPt = pos; drawAll(); refreshList();
+      } else {
+        // select nearest stroke to click
+        selectNearest(pos);
+      }
+    });
+
+    canvas.addEventListener('pointermove', (e)=>{
+      const pos = getPos(e);
+      if(tool==='draw' && drawing){
+        if(!lastPt || Math.hypot(pos.x-lastPt.x, pos.y-lastPt.y) >= pointStep){
+          strokes[strokes.length-1].points.push(pos);
+          lastPt = pos;
+          drawAll();
+        }
+      } else if(tool==='select'){
+        // hover effect (optional)
+        drawAll(pos);
+      }
+    });
+
+    canvas.addEventListener('pointerup', (e)=>{ drawing=false; lastPt=null; try{canvas.releasePointerCapture(e.pointerId)}catch{} });
+    canvas.addEventListener('pointerleave', ()=>{ drawing=false; lastPt=null; });
+
+    function getPos(e){
+      const r = canvas.getBoundingClientRect();
+      return { x: (e.clientX - r.left) * (canvas.width / r.width), y: (e.clientY - r.top) * (canvas.height / r.height) };
+    }
+
+    function drawAll(hoverPos=null){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+
+      // draw a faint mm grid every 10 mm
+      drawGrid();
+
+      for(const s of strokes){
+        ctx.lineCap='round'; ctx.lineJoin='round';
+        ctx.lineWidth = s.width;
+        ctx.strokeStyle = s.id===selectedId ? '#8ef' : '#cfe4ff';
+        ctx.globalAlpha = s.id===selectedId ? 1 : 0.9;
+        ctx.beginPath();
+        const pts = s.points;
+        if(!pts.length) continue;
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.stroke();
+      }
+
+      if(tool==='select' && hoverPos){
+        // show nearest stroke under cursor
+        const {id} = nearestStroke(hoverPos);
+        if(id){
+          const s = strokes.find(x=>x.id===id);
+          if(s){
+            ctx.lineWidth = s.width + 6;
+            ctx.strokeStyle = 'rgba(110,231,255,0.25)';
+            ctx.beginPath();
+            const pts=s.points; ctx.moveTo(pts[0].x, pts[0].y);
+            for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // border
+      ctx.strokeStyle = '#1e2a55'; ctx.lineWidth = 2; ctx.strokeRect(0,0,canvas.width,canvas.height);
+    }
+
+    function drawGrid(){
+      const mmPerGrid = 10; // 10mm grid
+      const pxX = mmPerGrid / mmPerPxX;
+      const pxY = mmPerGrid / mmPerPxY;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(168,179,209,0.12)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for(let x=pxX; x<canvas.width; x+=pxX){ ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); }
+      for(let y=pxY; y<canvas.height; y+=pxY){ ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function selectNearest(pos){
+      const {id} = nearestStroke(pos);
+      selectedId = id || null;
+      drawAll(); refreshList();
+    }
+
+    function nearestStroke(pos){
+      let bestId=null, bestD=Infinity;
+      for(const s of strokes){
+        const pts = s.points; if(pts.length<2) continue;
+        for(let i=1;i<pts.length;i++){
+          const d = pointLineDistance(pos, pts[i-1], pts[i]);
+          if(d < bestD){ bestD=d; bestId=s.id; }
+        }
+      }
+      const tolerance = 10; // px
+      if(bestD>tolerance) return {id:null, d:bestD};
+      return {id:bestId, d:bestD};
+    }
+
+    function deleteSelected(){
+      if(!selectedId) return;
+      const idx = strokes.findIndex(s=>s.id===selectedId);
+      if(idx>=0){ strokes.splice(idx,1); selectedId=null; drawAll(); refreshList(); }
+    }
+
+    function refreshList(){
+      marksDiv.innerHTML = '';
+      strokes.forEach((s,i)=>{
+        const d=document.createElement('div');
+        d.textContent = `Mark ${i+1}  (${s.points.length} pts, width ${s.width}px)`;
+        d.className = (s.id===selectedId)?'active':'';
+        d.onclick = ()=>{ selectedId = s.id; drawAll(); refreshList(); };
+        d.ondblclick = ()=>{ if(confirm('Delete this mark?')){ selectedId = s.id; deleteSelected(); } };
+        marksDiv.appendChild(d);
+      });
+    }
+
+    function downloadText(text, filename){
+      const blob = new Blob([text], {type:'text/plain'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename; a.click();
+      setTimeout(()=>URL.revokeObjectURL(url), 1000);
+    }
+
+    // === G‑Code generation ===
+    function pxToMm(pt){ return { x: pt.x * mmPerPxX, y: pt.y * mmPerPxY }; }
+
+    function zProfile(t){
+      // t in [0,1]: 0-0.25: 0->4; 0.25-0.75: hold 4; 0.75-1: 4->0
+      if(t <= 0.25) return 16 * t; // 0..4
+      if(t >= 0.75) return 16 * (1 - t); // 4..0
+      return 4;
+    }
+
+    function generateGCode(strokes, feed){
+      const lines = [];
+      lines.push('; Canvas → G‑Code export');
+      lines.push('; Work area: X 0..150mm, Y 0..100mm, Z 0..5mm (safe)');
+      lines.push('G21 ; set units to millimeters');
+      lines.push('G90 ; absolute positioning');
+      lines.push('G0 Z5');
+
+      strokes.forEach((s, idx)=>{
+        if(!s.points || s.points.length<2) return;
+        const pts = s.points.map(pxToMm);
+        const {L, total} = cumulativeLengths(pts);
+        if(total<=0) return;
+
+        const start = pts[0];
+        lines.push(`\n; ---- Mark ${idx+1} ----`);
+        lines.push(`G0 X${start.x.toFixed(3)} Y${start.y.toFixed(3)}`);
+        lines.push(`G1 Z0 F${feed}`);
+
+        for(let i=1;i<pts.length;i++){
+          const t = L[i] / total; // 0..1 progress along this mark
+          const z = zProfile(t);
+          const p = pts[i];
+          lines.push(`G1 X${p.x.toFixed(3)} Y${p.y.toFixed(3)} Z${z.toFixed(3)} F${feed}`);
+        }
+        // ensure end at Z0, then retract
+        const end = pts[pts.length-1];
+        lines.push(`G1 X${end.x.toFixed(3)} Y${end.y.toFixed(3)} Z0.000 F${feed}`);
+        lines.push('G0 Z5');
+      });
+
+      lines.push('\nM2 ; program end');
+      return lines.join('\n');
+    }
+
+    // initial paint
+    drawAll(); refreshList();
+  </script>
+</body>
+</html>

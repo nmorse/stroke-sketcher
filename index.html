@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Canvas → G‑Code (150×100mm)</title>
+    <style>
+        :root {
+            --bg: #0b1020;
+            --panel: #121933;
+            --accent: #6ee7ff;
+            --text: #e8eefc;
+            --muted: #a8b3d1;
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        header {
+            display: flex;
+            gap: .75rem;
+            align-items: center;
+            padding: 12px 16px;
+            background: linear-gradient(180deg, #121a36, #0e1430);
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            border-bottom: 1px solid #1e2a55
+        }
+
+        .btn {
+            background: #1b2652;
+            border: 1px solid #2a3a77;
+            color: var(--text);
+            padding: .5rem .75rem;
+            border-radius: .6rem;
+            cursor: pointer
+        }
+
+        .btn:hover {
+            background: #22306b
+        }
+
+        .btn[aria-pressed="true"] {
+            outline: 2px solid var(--accent)
+        }
+
+        .danger {
+            background: #3a1730;
+            border-color: #6a2a55
+        }
+
+        .danger:hover {
+            background: #4a1b3e
+        }
+
+        .ghost {
+            background: transparent;
+            border-color: #2a3a77
+        }
+
+        .row {
+            display: flex;
+            gap: .5rem;
+            align-items: center;
+            flex-wrap: wrap
+        }
+
+        .grow {
+            flex: 1 1 auto
+        }
+
+        .panel {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 12px;
+            padding: 12px
+        }
+
+        .card {
+            background: var(--panel);
+            border: 1px solid #1e2a55;
+            border-radius: 14px;
+            padding: 12px
+        }
+
+        canvas {
+            background: #0f1735;
+            border: 1px solid #1e2a55;
+            border-radius: 12px;
+            touch-action: none;
+            display: block;
+            width: 100%;
+            height: auto
+        }
+
+        label {
+            color: var(--muted);
+            font-size: .9rem
+        }
+
+        input[type=range] {
+            width: 180px
+        }
+
+        .kbd {
+            border: 1px solid #2a3a77;
+            border-bottom-width: 3px;
+            border-radius: 6px;
+            padding: .1rem .4rem;
+            font-family: ui-monospace, Consolas, Menlo, monospace;
+            color: #cfe4ff
+        }
+
+        .list {
+            max-height: 200px;
+            overflow: auto;
+            border: 1px dashed #2a3a77;
+            border-radius: 10px;
+            padding: 6px
+        }
+
+        .list div {
+            padding: 6px;
+            border-radius: 8px;
+            cursor: pointer
+        }
+
+        .list div.active {
+            outline: 2px solid var(--accent)
+        }
+
+        code,
+        pre {
+            background: #0a1129;
+            border: 1px solid #1e2a55;
+            border-radius: 10px;
+            padding: 8px;
+            color: #cfe4ff
+        }
+
+        footer {
+            padding: 10px 16px;
+            color: #9fb0d7
+        }
+    </style>
+</head>
+
+<body>
+    <header class="row">
+        <label>
+            Upload image
+            <input id="fileInput" type="file" accept="image/*" />
+        </label>
+        <button id="toolDraw" class="btn" aria-pressed="true" title="Draw (D)">✏️ Draw</button>
+        <button id="toolSelect" class="btn" aria-pressed="false" title="Select/Delete (S)">🧹 Select/Delete</button>
+        <div class="row">
+            <label for="width">Stroke</label>
+            <input id="width" type="range" min="1" max="12" value="3" />
+            <output id="widthOut">3 px</output>
+        </div>
+        <div class="row">
+            <label for="feed">Feed (F)</label>
+            <input id="feed" type="number" min="10" max="10000" step="10" value="800" style="width:100px" />
+        </div>
+        <div class="row">
+            <label for="pointStep">Point step</label>
+            <input id="pointStep" type="range" min="0" max="8" step="0.5" value="1.5" />
+            <output id="pointStepOut">1.5 px</output>
+        </div>
+        <div class="row">
+            <label for="HALNumber">HAL#</label>
+            <input id="HALNumber" type="number" min="1" max="8" step="1" value="1" />
+        </div>
+        <span class="grow"></span>
+        <button id="undo" class="btn ghost" title="Undo (Ctrl+Z)">↶ Undo</button>
+        <button id="clear" class="btn danger" title="Clear all">🗑️ Clear</button>
+        <button id="export" class="btn" title="Export G-code">⬇️ Export G‑code</button>
+    </header>
+
+    <main class="panel">
+        <section class="card">
+            <!-- Canvas is set so that its pixel width maps to 150mm and height to 100mm -->
+            <canvas id="canvas" width="720" height="600"></canvas>
+        </section>
+
+    </main>
+
+    <footer>
+        The canvas is <em>720×600 px</em>, mapping to palette area and <em>140×100 mm</em> ⇒ <strong>0.1667
+            mm/px</strong>.
+    </footer>
+
+    <script src="sketcher.js"></script>
+</body>
+
+</html>

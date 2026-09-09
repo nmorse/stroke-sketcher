@@ -35,8 +35,8 @@ const ctx = canvas.getContext('2d');
 // const marksDiv = document.getElementById('marks');
 
 const HAL = [ // v (vertical) is defined from the paper so negative dimensions indicate the paper is in not at 0 
-    {w: 150, h: -100, v:16, ztop: 3.4 },
-    {w: 335, h: 295, v:-100, ztop: 30 }
+    {w: 150, h: -100, v:16, ztop: 3.4, hasAAxis: false },
+    {w: 335, h: 295, v:-100, ztop: 30, hasAAxis: true }
 ];
 let hali = 1; // hardware abstraction layer index number
 const MM_W = () => HAL[hali].w; // machine work area (mm) 
@@ -77,7 +77,7 @@ function setImgParams() {
     const canvasAspect = canvas.width / canvas.height
     const difAspect = imgAspect - canvasAspect
     imgScale = (difAspect <= 0)? canvas.height / img.height:  canvas.width / img.width
-    console.log(imgAspect, canvasAspect, difAspect, imgScale)
+    // console.log(imgAspect, canvasAspect, difAspect, imgScale)
 }
 
 fileInput.addEventListener('change', () => {
@@ -126,7 +126,7 @@ HALNumberInput.addEventListener('input', () => {
     const h = Math.abs(HAL[hali].h*2)
     canvas.height = h
     canvas.style.height = `${h}px`
-    console.log(h)
+    //console.log(h)
 });
 
 undoBtn.onclick = () => { if (strokes.length) { strokes.pop(); selectedId = null; drawAll(); refreshList(); } };
@@ -304,6 +304,8 @@ function generateGCode(strokes, feed) {
     lines.push(`G0 Z${ztop().toFixed(3)}`);
     lines.push('G0 X0 Y0');
 
+    const hasAAxis = HAL[hali].hasAAxis
+
     strokes.forEach((s, idx) => {
         if (!s.points || s.points.length < 2) return;
         const pts = s.points.map(pxToMm);
@@ -331,11 +333,25 @@ function generateGCode(strokes, feed) {
         lines.push(`G0 X${start.x.toFixed(3)} Y${start.y.toFixed(3)}`);
         lines.push(`G1 Z${ztop().toFixed(3)} F${feed}`);
 
+        initBrushMachineRotation()
+
+        let prevAngle = brushMachineRotation(angle(pts[1].x - pts[0].x, pts[1].y - pts[0].y))
         for (let i = 1; i < pts.length; i++) {
+
             const t = L[i] / total; // 0..1 progress along this mark
-            const z = zProfile(t);
+            const pz = zProfile(t);
             const p = pts[i];
-            lines.push(`G1 X${p.x.toFixed(3)} Y${p.y.toFixed(3)} Z${z.toFixed(3)} F${feed}`);
+            if (hasAAxis) {
+                let r = angle(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y)
+                const [x, y, z] = offsetPt(p.x, p.y, pz, r)
+                const a = brushMachineRotation(r)
+                const f = rotAdjustedFeedRate(prevAngle - a, feed)
+                prevAngle = a
+                lines.push(`G1 X${x.toFixed(3)} Y${y.toFixed(2)} Z${z.toFixed(2)} A${a.toFixed(1)} F${f.toFixed(0)} `);
+            }
+            else {
+                lines.push(`G1 X${p.x.toFixed(2)} Y${p.y.toFixed(2)} Z${pz.toFixed(2)} F${feedz.toFixed(0)}`);
+            }
         }
         // ensure end at Z is pen up 
         const end = pts[pts.length - 1];
@@ -351,3 +367,67 @@ function generateGCode(strokes, feed) {
 // initial paint
 drawAll();
 refreshList();
+
+
+// machine angle
+function angle(dx, dy) {
+	return Math.atan2(dy, dx)
+}
+// test angle function
+console.log(angle(1, 0).toFixed(2), 0)
+console.log(angle(1, 1).toFixed(2), 45)
+console.log(angle(0, 1).toFixed(2), 90)
+console.log(angle(-1, 1).toFixed(2), 135)
+console.log(angle(-1, 0).toFixed(2), 180)
+console.log(angle(-1, -1).toFixed(2), 225)
+console.log(angle(0, -1).toFixed(2), 270)
+console.log(angle(1, -1).toFixed(2), 315)
+
+// [x, y, z, f] = offsetPt(p.x, p.y, pz, r)
+function offsetPt(ox, oy, oz, brushRotation) {
+    brushAngle = 0.79 // 0.79 radians (45 degrees)
+    brushLengthMm = 30
+	bx = Math.cos(brushRotation) * Math.sin(brushAngle) * brushLengthMm;
+	by = Math.sin(brushRotation) * Math.sin(brushAngle) * brushLengthMm;
+	bz = Math.cos(brushAngle) * brushLengthMm;
+    return [ox+bx, oy+by, oz+bz]
+}
+
+function setMachineBrushOffset(brushOffset, brushRotation, brushAngle, brushLengthMm) {
+	bx = Math.cos(brushRotation) * Math.sin(brushAngle) * brushLengthMm;
+	by = Math.sin(brushRotation) * Math.sin(brushAngle) * brushLengthMm;
+	bz = Math.cos(brushAngle) * brushLengthMm;
+}
+
+let last_br_deg = 0;
+let offset_br_deg = 0;
+
+function initBrushMachineRotation() {
+	last_br_deg = 0;
+	offset_br_deg = 0;
+}
+function brushMachineRotation(brushRotationRad) {
+	
+	let br_deg = brushRotationRad * 57.29578
+	// console.log(br_deg.toFixed(2))
+	// bp_deg will range from -180 to 180 degrees
+
+	if (last_br_deg === null) {
+		last_br_deg = br_deg
+	}
+	const dif = last_br_deg - br_deg
+	if (Math.abs(dif) > 200) {
+		if (dif > 0) {
+			offset_br_deg += 360
+		}
+		else {
+			offset_br_deg -= 360
+		}
+	}
+	last_br_deg = br_deg
+	return (br_deg + offset_br_deg) // * -1
+}
+
+function rotAdjustedFeedRate(da, of) {
+    return of+Math.abs(da*23)
+}

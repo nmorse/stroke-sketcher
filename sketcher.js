@@ -47,8 +47,8 @@ const PAL_Y_MIN = 20, PAL_Y_MAX = 30; // palette Y axis bounds
 const mmPerPxX = () => (MM_W() - PAL_MM_W) / canvas.width;  // 140 / 840 = 0.1667 mm/px
 const mmPerPxY = () =>  MM_H() / canvas.height; // 100 / 600 = 0.1667 mm/px
 const ztop = () => HAL[hali].ztop;
-const descent = 0.35; // percent of t
-const ascent = 0.85;  // percent
+const descent = 0.05; // percent of t
+const ascent = 0.95;  // percent
 const bottom = 4.98;
 const palette_bottom = 2.8;
 let tool = 'draw'; // 'draw' | 'select'
@@ -298,13 +298,16 @@ function zProfile(t) {
 function generateGCode(strokes, feed) {
     const lines = [];
     lines.push('; Canvas → G‑Code export');
-    lines.push('; Work area: X 0..150mm, Y 0..100mm, Z 0..5mm (safe)');
+    lines.push(`; Work area: X 0..${HAL[hali].w}mm, Y 0..${HAL[hali].h}mm, Z 0..${HAL[hali].v}mm (safe)`);
     lines.push('G21 ; set units to millimeters');
     lines.push('G90 ; absolute positioning');
     lines.push(`G0 Z${ztop().toFixed(3)}`);
     lines.push('G0 X0 Y0');
 
     const hasAAxis = HAL[hali].hasAAxis
+    if (hasAAxis) {
+        lines.push('G0 A0');
+    }
 
     strokes.forEach((s, idx) => {
         if (!s.points || s.points.length < 2) return;
@@ -317,21 +320,21 @@ function generateGCode(strokes, feed) {
         lines.push(`G0 Z${ztop().toFixed(3)}`);
         const palY = lerp(PAL_Y_MIN, PAL_Y_MAX, Math.random())
         lines.push(`G0 X${(PAL_MM_W - 10).toFixed(2)} Y${palY.toFixed(2)}`);
-        lines.push(`G1 X${(PAL_MM_W - 14).toFixed(2)} Z${palette_bottom.toFixed(2)} F${feed}`);
+        lines.push(`G1 X${(PAL_MM_W - 14).toFixed(2)} Z${palette_bottom.toFixed(2)} F${feed.toFixed(0)}`);
         lines.push(`G1 X0 F${feed}`);
+        lines.push(`G1 Z${ztop().toFixed(3)} F${feed.toFixed(0)}`);
+        lines.push(`G0 X${(PAL_MM_W - 10).toFixed(2)} Y${palY.toFixed(2)}`);
+        lines.push(`G1 X${(PAL_MM_W - 14).toFixed(2)} Z${palette_bottom.toFixed(2)} F${feed.toFixed(0)}`);
+        lines.push(`G1 X0 Y${PAL_Y_MIN.toFixed(2)} F${feed.toFixed(0)}`);
         lines.push(`G1 Z${ztop().toFixed(3)} F${feed}`);
         lines.push(`G0 X${(PAL_MM_W - 10).toFixed(2)} Y${palY.toFixed(2)}`);
-        lines.push(`G1 X${(PAL_MM_W - 14).toFixed(2)} Z${palette_bottom.toFixed(2)} F${feed}`);
-        lines.push(`G1 X0 Y${PAL_Y_MIN.toFixed(2)} F${feed}`);
-        lines.push(`G1 Z${ztop().toFixed(3)} F${feed}`);
-        lines.push(`G0 X${(PAL_MM_W - 10).toFixed(2)} Y${palY.toFixed(2)}`);
-        lines.push(`G1 X${(PAL_MM_W - 14).toFixed(2)} Z${palette_bottom.toFixed(2)} F${feed}`);
-        lines.push(`G1 X0 Y${PAL_Y_MAX.toFixed(2)} F${feed}`);
+        lines.push(`G1 X${(PAL_MM_W - 14).toFixed(2)} Z${palette_bottom.toFixed(2)} F${feed.toFixed(0)}`);
+        lines.push(`G1 X0 Y${PAL_Y_MAX.toFixed(2)} F${feed.toFixed(0)}`);
         lines.push(`G1 Z${ztop().toFixed(3)} F${feed}`);
 
         lines.push(`\n; ---- Mark ${idx + 1} ----`);
         lines.push(`G0 X${start.x.toFixed(3)} Y${start.y.toFixed(3)}`);
-        lines.push(`G1 Z${ztop().toFixed(3)} F${feed}`);
+        lines.push(`G1 Z${ztop().toFixed(3)} F${feed.toFixed(0)}`);
 
         initBrushMachineRotation()
 
@@ -350,7 +353,7 @@ function generateGCode(strokes, feed) {
                 lines.push(`G1 X${x.toFixed(3)} Y${y.toFixed(2)} Z${z.toFixed(2)} A${a.toFixed(1)} F${f.toFixed(0)} `);
             }
             else {
-                lines.push(`G1 X${p.x.toFixed(2)} Y${p.y.toFixed(2)} Z${pz.toFixed(2)} F${feedz.toFixed(0)}`);
+                lines.push(`G1 X${p.x.toFixed(2)} Y${p.y.toFixed(2)} Z${pz.toFixed(2)} F${feed.toFixed(0)}`);
             }
         }
         // ensure end at Z is pen up 
@@ -373,15 +376,15 @@ refreshList();
 function angle(dx, dy) {
 	return Math.atan2(dy, dx)
 }
-// test angle function
-console.log(angle(1, 0).toFixed(2), 0)
-console.log(angle(1, 1).toFixed(2), 45)
-console.log(angle(0, 1).toFixed(2), 90)
-console.log(angle(-1, 1).toFixed(2), 135)
-console.log(angle(-1, 0).toFixed(2), 180)
-console.log(angle(-1, -1).toFixed(2), 225)
-console.log(angle(0, -1).toFixed(2), 270)
-console.log(angle(1, -1).toFixed(2), 315)
+// // test angle function
+// console.log(angle(1, 0).toFixed(2), 0)
+// console.log(angle(1, 1).toFixed(2), 45)
+// console.log(angle(0, 1).toFixed(2), 90)
+// console.log(angle(-1, 1).toFixed(2), 135)
+// console.log(angle(-1, 0).toFixed(2), 180)
+// console.log(angle(-1, -1).toFixed(2), 225)
+// console.log(angle(0, -1).toFixed(2), 270)
+// console.log(angle(1, -1).toFixed(2), 315)
 
 // [x, y, z, f] = offsetPt(p.x, p.y, pz, r)
 function offsetPt(ox, oy, oz, brushRotation) {
@@ -425,7 +428,7 @@ function brushMachineRotation(brushRotationRad) {
 		}
 	}
 	last_br_deg = br_deg
-	return (br_deg + offset_br_deg) // * -1
+	return (br_deg + offset_br_deg)
 }
 
 function rotAdjustedFeedRate(da, of) {

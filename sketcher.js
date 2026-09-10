@@ -14,17 +14,6 @@ function pointLineDistance(p, a, b) {
     const proj = { x: a.x + t * vx, y: a.y + t * vy };
     return Math.sqrt(dist2(p, proj));
 }
-
-function cumulativeLengths(points) {
-    const L = [0];
-    for (let i = 1; i < points.length; i++) {
-        const dx = points[i].x - points[i - 1].x;
-        const dy = points[i].y - points[i - 1].y;
-        L[i] = L[i - 1] + Math.hypot(dx, dy);
-    }
-    return { L, total: L[L.length - 1] || 0 };
-}
-
 // === App State ===
 let img = new Image();
 let imgLoaded = false;
@@ -36,7 +25,7 @@ const ctx = canvas.getContext('2d');
 
 const HAL = [ // v (vertical) is defined from the paper so negative dimensions indicate the paper is in not at 0 
     {w: 150, h: -100, v:16, ztop: 3.4, hasAAxis: false },
-    {w: 335, h: 295, v:-100, ztop: 30, hasAAxis: true }
+    {w: 335, h: 295, v:-100, ztop: 80, hasAAxis: true }
 ];
 let hali = 1; // hardware abstraction layer index number
 const MM_W = () => HAL[hali].w; // machine work area (mm) 
@@ -47,10 +36,10 @@ const PAL_Y_MIN = 20, PAL_Y_MAX = 30; // palette Y axis bounds
 const mmPerPxX = () => (MM_W() - PAL_MM_W) / canvas.width;  // 140 / 840 = 0.1667 mm/px
 const mmPerPxY = () =>  MM_H() / canvas.height; // 100 / 600 = 0.1667 mm/px
 const ztop = () => HAL[hali].ztop;
-const descent = 0.05; // percent of t
-const ascent = 0.95;  // percent
-const bottom = 4.98;
-const palette_bottom = 2.8;
+const descent = 0.03; // percent of t
+const ascent = 0.97;  // percent
+const bottom = 10;
+const palette_bottom = 50;
 let tool = 'draw'; // 'draw' | 'select'
 let strokes = [];   // {id, width, points:[{x,y}], selected:false}
 let selectedId = null;
@@ -311,7 +300,7 @@ function generateGCode(strokes, feed) {
 
     strokes.forEach((s, idx) => {
         if (!s.points || s.points.length < 2) return;
-        const pts = s.points.map(pxToMm);
+        const pts = smooth2D(s.points.map(pxToMm));
         const { L, total } = cumulativeLengths(pts);
         if (total <= 0) return;
 
@@ -362,6 +351,9 @@ function generateGCode(strokes, feed) {
         // lines.push(`G0 Z${ztop().toFixed(3)}`);
     });
     lines.push(`\nG0 Z${ztop().toFixed(3)}`);
+    if (hasAAxis) {
+        lines.push('G0 A0');
+    }
     lines.push('G0 X0 Y0');
     lines.push('M2 ; program end');
     return lines.join('\n');
@@ -434,3 +426,34 @@ function brushMachineRotation(brushRotationRad) {
 function rotAdjustedFeedRate(da, of) {
     return of+Math.abs(da*23)
 }
+
+
+function smooth2D(points) {
+    const shmoo = [points[0], average3Pts(points[0], points[1], points[2])];
+    for (let i = 2; i < points.length-2; i++) {
+        shmoo.push(average5Pts(points[i-2], points[i-1], points[i], points[i+1], points[i+2]))
+    }
+    shmoo.push(points[points.length-2])
+    shmoo.push(points[points.length-1])
+    return shmoo;
+}
+
+function average3Pts(a, b, c) {
+    return {x: a.x*0.3+b.x*0.4+c.x*0.3, y:a.y*0.3+b.y*0.4+c.y*0.3}
+}
+function average5Pts(a, b, c, d, e) {
+    // const af = 0.125, bf = 0.25, cf= 0.25, df = 0.25, ef = 0.125
+    const af = 0.0625, bf = 0.25, cf= 0.375, df = 0.25, ef = 0.0625 // 5-Point Gaussian Weights
+    return {x: a.x*af+b.x*bf+c.x*cf+d.x*df+e.x*ef, y: a.y*af+b.y*bf+c.y*cf+d.y*df+e.y*ef}
+}
+
+function cumulativeLengths(points) {
+    const L = [0];
+    for (let i = 1; i < points.length; i++) {
+        const dx = points[i].x - points[i - 1].x;
+        const dy = points[i].y - points[i - 1].y;
+        L[i] = L[i - 1] + Math.hypot(dx, dy);
+    }
+    return { L, total: L[L.length - 1] || 0 };
+}
+

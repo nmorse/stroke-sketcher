@@ -135,29 +135,37 @@ document.addEventListener('keydown', (e) => {
 
 // === Drawing ===
 canvas.addEventListener('pointerdown', (e) => {
-    const pos = getPos(e);
-    if (tool === 'draw') {
-        drawing = true; canvas.setPointerCapture(e.pointerId);
-        const stroke = { id: crypto.randomUUID(), width: parseFloat(widthInput.value) | 0 || 3, points: [pos], selected: false };
-        strokes.push(stroke);
-        lastPt = pos; drawAll(); refreshList();
-    } else {
-        // select nearest stroke to click
-        selectNearest(pos);
-    }
+    // const events = event.getCoalescedEvents();
+
+    // for (const e of events) {
+        const pos = getPos(e);
+        if (tool === 'draw') {
+            drawing = true; canvas.setPointerCapture(e.pointerId);
+            const stroke = { id: crypto.randomUUID(), width: parseFloat(widthInput.value) | 0 || 3, points: [pos], selected: false };
+            strokes.push(stroke);
+            lastPt = pos; drawAll(); refreshList();
+        } else {
+            // select nearest stroke to click
+            selectNearest(pos);
+        }
+    // }
 });
 
-canvas.addEventListener('pointermove', (e) => {
-    const pos = getPos(e);
-    if (tool === 'draw' && drawing) {
-        if (!lastPt || Math.hypot(pos.x - lastPt.x, pos.y - lastPt.y) >= pointStep) {
-            strokes[strokes.length - 1].points.push(pos);
-            lastPt = pos;
-            drawAll();
+canvas.addEventListener('pointermove', (event) => {
+    const events = event.getCoalescedEvents();
+
+    for (const e of events) {
+        const pos = getPos(e);
+        if (tool === 'draw' && drawing) {
+            if (!lastPt || Math.hypot(pos.x - lastPt.x, pos.y - lastPt.y) >= pointStep) {
+                strokes[strokes.length - 1].points.push(pos);
+                lastPt = pos;
+                drawAll();
+            }
+        } else if (tool === 'select') {
+            // hover effect (optional)
+            drawAll(pos);
         }
-    } else if (tool === 'select') {
-        // hover effect (optional)
-        drawAll(pos);
     }
 });
 
@@ -166,7 +174,13 @@ canvas.addEventListener('pointerleave', () => { drawing = false; lastPt = null; 
 
 function getPos(e) {
     const r = canvas.getBoundingClientRect();
-    return { x: (e.clientX - r.left) * (canvas.width / r.width), y: (e.clientY - r.top) * (canvas.height / r.height) };
+    return { x: (e.clientX - r.left) * (canvas.width / r.width), 
+             y: (e.clientY - r.top) * (canvas.height / r.height),
+             press: e.pressure,
+             tiltX: e.tiltX,
+             tiltY: e.tiltY,
+             timeStamp: e.timeStamp
+            };
 }
 
 function drawAll(hoverPos = null) {
@@ -184,8 +198,23 @@ function drawAll(hoverPos = null) {
         ctx.beginPath();
         const pts = s.points;
         if (!pts.length) continue;
-        ctx.moveTo(pts[0].x, pts[0].y);
-        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        // ctx.moveTo(pts[0].x, pts[0].y);
+        let lastX = pts[0].x
+        let lastY = pts[0].y 
+        for (let i = 1; i < pts.length; i++) {
+            ctx.lineWidth = s.width * 2 * pts[i].press
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(pts[i].x, pts[i].y);
+            // ctx.arc(pts[i].x, pts[i].y, s.width*pts[i].press, 0, Math.PI * 2, false);
+            ctx.fillStyle = "green";
+            // ctx.fill();
+            ctx.closePath();
+            lastX = pts[i].x
+            lastY = pts[i].y 
+            ctx.stroke();
+            // ctx.lineTo(pts[i].x, pts[i].y);
+        }
         ctx.stroke();
     }
 

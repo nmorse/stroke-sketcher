@@ -36,8 +36,8 @@ const PAL_Y_MIN = 20, PAL_Y_MAX = 30; // palette Y axis bounds
 const mmPerPxX = () => (MM_W() - PAL_MM_W) / canvas.width;  // 140 / 840 = 0.1667 mm/px
 const mmPerPxY = () =>  MM_H() / canvas.height; // 100 / 600 = 0.1667 mm/px
 const ztop = () => HAL[hali].ztop;
-const descent = 0.03; // percent of t
-const ascent = 0.97;  // percent
+const descent = 0.1; // percent of t
+const ascent = 0.9;  // percent
 const bottom = 10;
 const palette_bottom = 50;
 let tool = 'draw'; // 'draw' | 'select'
@@ -198,11 +198,14 @@ function drawAll(hoverPos = null) {
         ctx.beginPath();
         const pts = s.points;
         if (!pts.length) continue;
+        const pointerHasPressure = (pts[0].press !== 0.5)
         // ctx.moveTo(pts[0].x, pts[0].y);
         let lastX = pts[0].x
-        let lastY = pts[0].y 
+        let lastY = pts[0].y
         for (let i = 1; i < pts.length; i++) {
-            ctx.lineWidth = s.width * 2 * pts[i].press
+            const t = i/pts.length
+            ctx.lineWidth = pointerHasPressure ? s.width * 2 * pts[i].press: zProfile(t, 0, s.width*3)
+            console.log(t, ctx.lineWidth)
             ctx.beginPath();
             ctx.moveTo(lastX, lastY);
             ctx.lineTo(pts[i].x, pts[i].y);
@@ -306,10 +309,15 @@ function pxToMm(pt) {
     return { x, y };
 }
 
-function zProfile(t) {
+function zPressure(pressure) {
+    return lerp(ztop(), bottom, pressure)
+}
+
+function zProfile(t, top, bot=bottom) {
     // t in [0,1]: 0-0.25: 0->4; 0.25-0.75: hold 4; 0.75-1: 4->0
-    if (t <= descent) return lerp(ztop(), bottom, t / descent); // ztop..bottom
-    if (t >= ascent) return lerp(ztop(), bottom, (1 - t) / (1 - ascent)); // bottom..ztop
+    // console.log(t, t / descent, (1 - t) / (1 - ascent))
+    if (t <= descent) return lerp(top, bot, t / descent); // top..bottom
+    if (t >= ascent) return lerp(top, bot, (1 - t) / (1 - ascent)); // bottom..top
     return bottom;
 }
 
@@ -328,39 +336,42 @@ function generateGCode(strokes, feed) {
     }
 
     strokes.forEach((s, idx) => {
-        if (!s.points || s.points.length < 2) return;
+        if (!s.points || s.points.length < 5) return;
         const pts = smooth2D(s.points.map(pxToMm));
         const { L, total } = cumulativeLengths(pts);
         if (total <= 0) return;
 
         const start = pts[0];
-        lines.push(`\n; ---- Dip ${idx + 1} ----`);
-        lines.push(`G0 Z${ztop().toFixed(3)}`);
-        const palY = lerp(PAL_Y_MIN, PAL_Y_MAX, Math.random())
-        lines.push(`G0 X${(PAL_MM_W - 10).toFixed(2)} Y${palY.toFixed(2)}`);
-        lines.push(`G1 X${(PAL_MM_W - 14).toFixed(2)} Z${palette_bottom.toFixed(2)} F${feed.toFixed(0)}`);
-        lines.push(`G1 X0 F${feed}`);
-        lines.push(`G1 Z${ztop().toFixed(3)} F${feed.toFixed(0)}`);
-        lines.push(`G0 X${(PAL_MM_W - 10).toFixed(2)} Y${palY.toFixed(2)}`);
-        lines.push(`G1 X${(PAL_MM_W - 14).toFixed(2)} Z${palette_bottom.toFixed(2)} F${feed.toFixed(0)}`);
-        lines.push(`G1 X0 Y${PAL_Y_MIN.toFixed(2)} F${feed.toFixed(0)}`);
-        lines.push(`G1 Z${ztop().toFixed(3)} F${feed}`);
-        lines.push(`G0 X${(PAL_MM_W - 10).toFixed(2)} Y${palY.toFixed(2)}`);
-        lines.push(`G1 X${(PAL_MM_W - 14).toFixed(2)} Z${palette_bottom.toFixed(2)} F${feed.toFixed(0)}`);
-        lines.push(`G1 X0 Y${PAL_Y_MAX.toFixed(2)} F${feed.toFixed(0)}`);
-        lines.push(`G1 Z${ztop().toFixed(3)} F${feed}`);
+
+        // lines.push(`\n; ---- Dip ${idx + 1} ----`);
+        // lines.push(`G0 Z${ztop().toFixed(3)}`);
+        // const palY = lerp(PAL_Y_MIN, PAL_Y_MAX, Math.random())
+        // lines.push(`G0 X${(PAL_MM_W - 10).toFixed(2)} Y${palY.toFixed(2)}`);
+        // lines.push(`G1 X${(PAL_MM_W - 14).toFixed(2)} Z${palette_bottom.toFixed(2)} F${feed.toFixed(0)}`);
+        // lines.push(`G1 X0 F${feed}`);
+        // lines.push(`G1 Z${ztop().toFixed(3)} F${feed.toFixed(0)}`);
+        // lines.push(`G0 X${(PAL_MM_W - 10).toFixed(2)} Y${palY.toFixed(2)}`);
+        // lines.push(`G1 X${(PAL_MM_W - 14).toFixed(2)} Z${palette_bottom.toFixed(2)} F${feed.toFixed(0)}`);
+        // lines.push(`G1 X0 Y${PAL_Y_MIN.toFixed(2)} F${feed.toFixed(0)}`);
+        // lines.push(`G1 Z${ztop().toFixed(3)} F${feed}`);
+        // lines.push(`G0 X${(PAL_MM_W - 10).toFixed(2)} Y${palY.toFixed(2)}`);
+        // lines.push(`G1 X${(PAL_MM_W - 14).toFixed(2)} Z${palette_bottom.toFixed(2)} F${feed.toFixed(0)}`);
+        // lines.push(`G1 X0 Y${PAL_Y_MAX.toFixed(2)} F${feed.toFixed(0)}`);
+        // lines.push(`G1 Z${ztop().toFixed(3)} F${feed}`);
 
         lines.push(`\n; ---- Mark ${idx + 1} ----`);
         lines.push(`G0 X${start.x.toFixed(3)} Y${start.y.toFixed(3)}`);
         lines.push(`G1 Z${ztop().toFixed(3)} F${feed.toFixed(0)}`);
 
         initBrushMachineRotation()
+        const pointerHasPressure = (s.points[0].press !== 0.5)
 
         let prevAngle = brushMachineRotation(angle(pts[1].x - pts[0].x, pts[1].y - pts[0].y))
         for (let i = 1; i < pts.length; i++) {
 
             const t = L[i] / total; // 0..1 progress along this mark
-            const pz = zProfile(t);
+            const pz = pointerHasPressure? zPressure(s.points[i].press) : zProfile(t, ztop());
+            console.log(t, pz)
             const p = pts[i];
             if (hasAAxis) {
                 let r = angle(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y)
@@ -368,7 +379,7 @@ function generateGCode(strokes, feed) {
                 const a = brushMachineRotation(r)
                 const f = rotAdjustedFeedRate(prevAngle - a, feed)
                 prevAngle = a
-                lines.push(`G1 X${x.toFixed(3)} Y${y.toFixed(2)} Z${z.toFixed(2)} A${a.toFixed(1)} F${f.toFixed(0)} `);
+                lines.push(`G1 X${x.toFixed(2)} Y${y.toFixed(2)} Z${z.toFixed(2)} A${a.toFixed(1)} F${f.toFixed(0)} `);
             }
             else {
                 lines.push(`G1 X${p.x.toFixed(2)} Y${p.y.toFixed(2)} Z${pz.toFixed(2)} F${feed.toFixed(0)}`);

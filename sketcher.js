@@ -25,7 +25,7 @@ const ctx = canvas.getContext('2d');
 
 const HAL = [ // v (vertical) is defined from the paper so negative dimensions indicate the paper is in not at 0 
     {w: 150, h: -100, v:16, ztop: 3.4, hasAAxis: false },
-    {w: 335, h: 295, v:-100, ztop: 80, hasAAxis: true }
+    {w: 335, h: 295, v:-100, ztop: 30, hasAAxis: true }
 ];
 let hali = 1; // hardware abstraction layer index number
 const MM_W = () => HAL[hali].w; // machine work area (mm) 
@@ -38,7 +38,7 @@ const mmPerPxY = () =>  MM_H() / canvas.height; // 100 / 600 = 0.1667 mm/px
 const ztop = () => HAL[hali].ztop;
 const descent = 0.1; // percent of t
 const ascent = 0.9;  // percent
-const bottom = 10;
+const bottom = 2;
 const palette_bottom = 50;
 let tool = 'draw'; // 'draw' | 'select'
 let strokes = [];   // {id, width, points:[{x,y}], selected:false}
@@ -360,9 +360,15 @@ function generateGCode(strokes, feed) {
         // lines.push(`G1 Z${ztop().toFixed(3)} F${feed}`);
 
         lines.push(`\n; ---- Mark ${idx + 1} ----`);
-        lines.push(`G0 X${start.x.toFixed(3)} Y${start.y.toFixed(3)}`);
-        lines.push(`G1 Z${ztop().toFixed(3)} F${feed.toFixed(0)}`);
-
+        lines.push(`G1 Z${ztop().toFixed(2)} F${feed.toFixed(0)}`);
+        if (hasAAxis) {
+            const r = angle(pts[1].x - pts[0].x, pts[1].y - pts[0].y)
+            const a = brushMachineRotation(r)
+            lines.push(`G0 X${start.x.toFixed(2)} Y${start.y.toFixed(2)} A${a.toFixed(1)}`);
+        }
+        else {
+            lines.push(`G0 X${start.x.toFixed(2)} Y${start.y.toFixed(2)}`);
+        }
         initBrushMachineRotation()
         const pointerHasPressure = (s.points[0].press !== 0.5)
 
@@ -469,10 +475,11 @@ function rotAdjustedFeedRate(da, of) {
 
 
 function smooth2D(points) {
-    const shmoo = [points[0], average3Pts(points[0], points[1], points[2])];
-    for (let i = 2; i < points.length-2; i++) {
-        shmoo.push(average5Pts(points[i-2], points[i-1], points[i], points[i+1], points[i+2]))
+    const shmoo = [points[0], average3Pts(points[0], points[1], points[2]), average3Pts(points[1], points[2], points[3])];
+    for (let i = 3; i < points.length-3; i++) {
+        shmoo.push(average7Pts(points[i-3], points[i-2], points[i-1], points[i], points[i+1], points[i+2], points[i+3]))
     }
+    shmoo.push(points[points.length-3])
     shmoo.push(points[points.length-2])
     shmoo.push(points[points.length-1])
     return shmoo;
@@ -485,6 +492,19 @@ function average5Pts(a, b, c, d, e) {
     // const af = 0.125, bf = 0.25, cf= 0.25, df = 0.25, ef = 0.125
     const af = 0.0625, bf = 0.25, cf= 0.375, df = 0.25, ef = 0.0625 // 5-Point Gaussian Weights
     return {x: a.x*af+b.x*bf+c.x*cf+d.x*df+e.x*ef, y: a.y*af+b.y*bf+c.y*cf+d.y*df+e.y*ef}
+}
+// a 7 point bell curve smoothing function
+function average7Pts(a, b, c, d, e, f, g) {
+    const af = 0.0625; 
+    const bf = 0.125;
+    const cf = 0.1875;
+    const df = 0.25;
+    const ef = 0.1875;
+    const ff = 0.125;
+    const gf = 0.0625;
+
+    return a * af + b * bf + c * cf + d * df +
+           e * ef + f * ff + g * gf;
 }
 
 function cumulativeLengths(points) {

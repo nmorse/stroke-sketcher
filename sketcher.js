@@ -25,7 +25,7 @@ const ctx = canvas.getContext('2d');
 
 const HAL = [ // v (vertical) is defined from the paper so negative dimensions indicate the paper is in not at 0 
     {w: 150, h: -100, v:16, ztop: 3.4, hasAAxis: false },
-    {w: 335, h: 295, v:-100, ztop: 30, hasAAxis: true }
+    {w: 335, h: 295, v:-100, ztop: 10, hasAAxis: true }
 ];
 let hali = 1; // hardware abstraction layer index number
 const MM_W = () => HAL[hali].w; // machine work area (mm) 
@@ -36,6 +36,7 @@ const PAL_Y_MIN = 20, PAL_Y_MAX = 30; // palette Y axis bounds
 const mmPerPxX = () => (MM_W() - PAL_MM_W) / canvas.width;  // 140 / 840 = 0.1667 mm/px
 const mmPerPxY = () =>  MM_H() / canvas.height; // 100 / 600 = 0.1667 mm/px
 const ztop = () => HAL[hali].ztop;
+const zsafe = () => ztop[hali] + 20;
 const descent = 0.1; // percent of t
 const ascent = 0.9;  // percent
 const bottom = 2;
@@ -204,8 +205,8 @@ function drawAll(hoverPos = null) {
         let lastY = pts[0].y
         for (let i = 1; i < pts.length; i++) {
             const t = i/pts.length
-            ctx.lineWidth = pointerHasPressure ? s.width * 2 * pts[i].press: zProfile(t, 0, s.width*3)
-            console.log(t, ctx.lineWidth)
+            ctx.lineWidth = pointerHasPressure ? s.width * 2 * pts[i].press: zProfile(t, 0, s.width)
+            // console.log(t, ctx.lineWidth)
             ctx.beginPath();
             ctx.moveTo(lastX, lastY);
             ctx.lineTo(pts[i].x, pts[i].y);
@@ -313,12 +314,12 @@ function zPressure(pressure) {
     return lerp(ztop(), bottom, pressure)
 }
 
-function zProfile(t, top, bot=bottom) {
+function zProfile(t, top, bot) {
     // t in [0,1]: 0-0.25: 0->4; 0.25-0.75: hold 4; 0.75-1: 4->0
     // console.log(t, t / descent, (1 - t) / (1 - ascent))
     if (t <= descent) return lerp(top, bot, t / descent); // top..bottom
     if (t >= ascent) return lerp(top, bot, (1 - t) / (1 - ascent)); // bottom..top
-    return bottom;
+    return bot;
 }
 
 function generateGCode(strokes, feed) {
@@ -327,7 +328,7 @@ function generateGCode(strokes, feed) {
     lines.push(`; Work area: X 0..${HAL[hali].w}mm, Y 0..${HAL[hali].h}mm, Z 0..${HAL[hali].v}mm (safe)`);
     lines.push('G21 ; set units to millimeters');
     lines.push('G90 ; absolute positioning');
-    lines.push(`G0 Z${ztop().toFixed(3)}`);
+    lines.push(`G0 Z${zsafe().toFixed(3)}`);
     lines.push('G0 X0 Y0');
 
     const hasAAxis = HAL[hali].hasAAxis
@@ -360,7 +361,7 @@ function generateGCode(strokes, feed) {
         // lines.push(`G1 Z${ztop().toFixed(3)} F${feed}`);
 
         lines.push(`\n; ---- Mark ${idx + 1} ----`);
-        lines.push(`G1 Z${ztop().toFixed(2)} F${feed.toFixed(0)}`);
+        
         if (hasAAxis) {
             const r = angle(pts[1].x - pts[0].x, pts[1].y - pts[0].y)
             const a = brushMachineRotation(r)
@@ -369,6 +370,7 @@ function generateGCode(strokes, feed) {
         else {
             lines.push(`G0 X${start.x.toFixed(2)} Y${start.y.toFixed(2)}`);
         }
+        lines.push(`G1 Z${ztop().toFixed(2)} F${feed.toFixed(0)}`);
         initBrushMachineRotation()
         const pointerHasPressure = (s.points[0].press !== 0.5)
 
@@ -376,8 +378,8 @@ function generateGCode(strokes, feed) {
         for (let i = 1; i < pts.length; i++) {
 
             const t = L[i] / total; // 0..1 progress along this mark
-            const pz = pointerHasPressure? zPressure(s.points[i].press) : zProfile(t, ztop());
-            console.log(t, pz)
+            const pz = pointerHasPressure? zPressure(s.points[i].press) : zProfile(t, ztop(), bottom);
+            // console.log(t, pz)
             const p = pts[i];
             if (hasAAxis) {
                 let r = angle(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y)
@@ -393,10 +395,10 @@ function generateGCode(strokes, feed) {
         }
         // ensure end at Z is pen up 
         const end = pts[pts.length - 1];
-        lines.push(`G1 X${end.x.toFixed(3)} Y${end.y.toFixed(3)} Z${ztop().toFixed(3)} F${feed}`);
+        lines.push(`G1 X${end.x.toFixed(2)} Y${end.y.toFixed(2)} Z${zsafe().toFixed(2)} F${feed.toFixed(0)}`);
         // lines.push(`G0 Z${ztop().toFixed(3)}`);
     });
-    lines.push(`\nG0 Z${ztop().toFixed(3)}`);
+    lines.push(`\nG0 Z${zsafe().toFixed(2)}`);
     if (hasAAxis) {
         lines.push('G0 A0');
     }
@@ -503,8 +505,8 @@ function average7Pts(a, b, c, d, e, f, g) {
     const ff = 0.125;
     const gf = 0.0625;
 
-    return a * af + b * bf + c * cf + d * df +
-           e * ef + f * ff + g * gf;
+    return {x: a.x*af+b.x*bf+c.x*cf+d.x*df+e.x*ef+f.x*ff+g.x*gf, 
+            y: a.y*af+b.y*bf+c.y*cf+d.y*df+e.y*ef+f.y*ff+g.y*gf}
 }
 
 function cumulativeLengths(points) {

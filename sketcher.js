@@ -23,11 +23,11 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 // const marksDiv = document.getElementById('marks');
 
-const HAL = [ // v (vertical) is defined from the paper so negative dimensions indicate the paper is in not at 0 
+const HAL = [ // v (vertical) is defined from the paper so negative dimensions indicate the paper is not at 0 
+    {w: 335, h: 295, v:100, ztop: 10, hasAAxis: true },
     {w: 150, h: -100, v:16, ztop: 3.4, hasAAxis: false },
-    {w: 335, h: 295, v:-100, ztop: 10, hasAAxis: true }
 ];
-let hali = 1; // hardware abstraction layer index number
+let hali = 0; // hardware abstraction layer index number
 const MM_W = () => HAL[hali].w; // machine work area (mm) 
 const MM_H = () => HAL[hali].h;
 const MM_V = () => HAL[hali].v;
@@ -36,7 +36,7 @@ const PAL_Y_MIN = 20, PAL_Y_MAX = 30; // palette Y axis bounds
 const mmPerPxX = () => (MM_W() - PAL_MM_W) / canvas.width;  // 140 / 840 = 0.1667 mm/px
 const mmPerPxY = () =>  MM_H() / canvas.height; // 100 / 600 = 0.1667 mm/px
 const ztop = () => HAL[hali].ztop;
-const zsafe = () => ztop[hali] + 20;
+const zsafe = () => ztop() + 50;
 const descent = 0.1; // percent of t
 const ascent = 0.9;  // percent
 const bottom = 2;
@@ -109,6 +109,10 @@ HALNumberInput.addEventListener('input', () => {
     hali = parseInt(HALNumberInput.value) - 1;
     if (hali < 0 || hali >= HAL.length)
         hali = 0;
+    setCanvasToHAL()
+});
+
+function setCanvasToHAL() {
     const w = Math.abs(HAL[hali].w*2)
     canvas.width = w
     canvas.style.width = `${w}px`
@@ -117,7 +121,7 @@ HALNumberInput.addEventListener('input', () => {
     canvas.height = h
     canvas.style.height = `${h}px`
     //console.log(h)
-});
+}
 
 undoBtn.onclick = () => { if (strokes.length) { strokes.pop(); selectedId = null; drawAll(); refreshList(); } };
 clearBtn.onclick = () => { if (confirm('Clear all marks?')) { strokes = []; selectedId = null; drawAll(); refreshList(); } };
@@ -305,9 +309,16 @@ function downloadText(text, filename) {
 
 // === G‑Code generation with bounds clipping
 function pxToMm(pt) {
-    const x = Math.max(PAL_MM_W, Math.min(MM_W() + PAL_MM_W, pt.x * mmPerPxX() + PAL_MM_W))
-    const y = Math.max(0, Math.min(MM_H(), MM_H() - pt.y * mmPerPxY()))
+    const x = pt.x * mmPerPxX()
+    const y = pt.y * mmPerPxY()
     return { x, y };
+}
+
+function inBounds(pt3) {
+    const x = Math.max(0, Math.min(MM_W(), pt3[0]))
+    const y = Math.max(0, Math.min(MM_H(), pt3[1]))
+    const z = Math.max(0, Math.min(MM_V(), pt3[2]))
+    return [ x, y, z ]
 }
 
 function zPressure(pressure) {
@@ -328,7 +339,7 @@ function generateGCode(strokes, feed) {
     lines.push(`; Work area: X 0..${HAL[hali].w}mm, Y 0..${HAL[hali].h}mm, Z 0..${HAL[hali].v}mm (safe)`);
     lines.push('G21 ; set units to millimeters');
     lines.push('G90 ; absolute positioning');
-    lines.push(`G0 Z${zsafe().toFixed(3)}`);
+    lines.push(`G0 Z${zsafe().toFixed(2)}`);
     lines.push('G0 X0 Y0');
 
     const hasAAxis = HAL[hali].hasAAxis
@@ -336,6 +347,7 @@ function generateGCode(strokes, feed) {
         lines.push('G0 A0');
     }
 
+    initBrushMachineRotation()
     strokes.forEach((s, idx) => {
         if (!s.points || s.points.length < 5) return;
         const pts = smooth2D(s.points.map(pxToMm));
@@ -361,17 +373,16 @@ function generateGCode(strokes, feed) {
         // lines.push(`G1 Z${ztop().toFixed(3)} F${feed}`);
 
         lines.push(`\n; ---- Mark ${idx + 1} ----`);
-        
+        lines.push(`G0 Z${zsafe().toFixed(2)}`);
         if (hasAAxis) {
             const r = angle(pts[1].x - pts[0].x, pts[1].y - pts[0].y)
+            const [x, y, z] = inBounds(offsetPt(start.x, start.y, ztop(), r))
             const a = brushMachineRotation(r)
-            lines.push(`G0 X${start.x.toFixed(2)} Y${start.y.toFixed(2)} A${a.toFixed(1)}`);
+            lines.push(`G0 X${x.toFixed(2)} Y${y.toFixed(2)} Z${(z+5).toFixed(2)} A${a.toFixed(1)}`);
         }
         else {
             lines.push(`G0 X${start.x.toFixed(2)} Y${start.y.toFixed(2)}`);
         }
-        lines.push(`G1 Z${ztop().toFixed(2)} F${feed.toFixed(0)}`);
-        initBrushMachineRotation()
         const pointerHasPressure = (s.points[0].press !== 0.5)
 
         let prevAngle = brushMachineRotation(angle(pts[1].x - pts[0].x, pts[1].y - pts[0].y))
@@ -383,7 +394,7 @@ function generateGCode(strokes, feed) {
             const p = pts[i];
             if (hasAAxis) {
                 let r = angle(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y)
-                const [x, y, z] = offsetPt(p.x, p.y, pz, r)
+                const [x, y, z] = inBounds(offsetPt(p.x, p.y, pz, r))
                 const a = brushMachineRotation(r)
                 const f = rotAdjustedFeedRate(prevAngle - a, feed)
                 prevAngle = a
@@ -410,6 +421,7 @@ function generateGCode(strokes, feed) {
 // initial paint
 drawAll();
 refreshList();
+setCanvasToHAL();
 
 
 // machine angle

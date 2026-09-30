@@ -24,8 +24,8 @@ const ctx = canvas.getContext('2d');
 // const marksDiv = document.getElementById('marks');
 
 const HAL = [ // v (vertical) is defined from the paper so negative dimensions indicate the paper is not at 0 
-    {w: 335, h: 295, v:100, ztop: 10, hasAAxis: true },
-    {w: 150, h: -100, v:16, ztop: 3.4, hasAAxis: false },
+    {w: 335, h: 295, v:100, ztop: 10, hasAAxis: true, name: "ncnc Brush" },
+    {w: 150, h: -100, v:16, ztop: 3.4, hasAAxis: false, name: "Axidraw Mini-Kit 2"},
 ];
 let hali = 0; // hardware abstraction layer index number
 const MM_W = () => HAL[hali].w; // machine work area (mm) 
@@ -148,7 +148,7 @@ canvas.addEventListener('pointerdown', (e) => {
             drawing = true; canvas.setPointerCapture(e.pointerId);
             const stroke = { id: crypto.randomUUID(), width: parseFloat(widthInput.value) | 0 || 3, points: [pos], selected: false };
             strokes.push(stroke);
-            lastPt = pos; drawAll(); refreshList();
+            lastPt = pos; drawAll(stroke); refreshList();
         } else {
             // select nearest stroke to click
             selectNearest(pos);
@@ -165,11 +165,11 @@ canvas.addEventListener('pointermove', (event) => {
             if (!lastPt || Math.hypot(pos.x - lastPt.x, pos.y - lastPt.y) >= pointStep) {
                 strokes[strokes.length - 1].points.push(pos);
                 lastPt = pos;
-                drawAll();
+                drawAll(strokes[strokes.length - 1]);
             }
         } else if (tool === 'select') {
             // hover effect (optional)
-            drawAll(pos);
+            drawAll(null, pos);
         }
     }
 });
@@ -188,42 +188,50 @@ function getPos(e) {
             };
 }
 
-function drawAll(hoverPos = null) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, img.width*imgScale, img.height*imgScale);
+function paint(s) {
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.lineWidth = s.width;
+    ctx.strokeStyle = s.id === selectedId ? '#8ef' : '#cfe4ff';
+    ctx.globalAlpha = s.id === selectedId ? 1 : 0.9;
+    ctx.beginPath();
+    const pts = s.points;
+    if (!pts.length) return;
+    const pointerHasPressure = (pts[0].press !== 0.5)
+    // ctx.moveTo(pts[0].x, pts[0].y);
+    let lastX = pts[0].x
+    let lastY = pts[0].y
+    for (let i = 1; i < pts.length; i++) {
+        const t = i/pts.length
+        ctx.lineWidth = pointerHasPressure ? s.width * 2 * pts[i].press: zProfile(t, 0, s.width)
+        // console.log(t, ctx.lineWidth)
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(pts[i].x, pts[i].y);
+        // ctx.arc(pts[i].x, pts[i].y, s.width*pts[i].press, 0, Math.PI * 2, false);
+        ctx.fillStyle = "green";
+        // ctx.fill();
+        ctx.closePath();
+        lastX = pts[i].x
+        lastY = pts[i].y 
+        ctx.stroke();
+        // ctx.lineTo(pts[i].x, pts[i].y);
+    }
+    ctx.stroke();
+}
 
+function drawAll(stroke=null, hoverPos = null) {
+    
     // draw a faint mm grid every 10 mm
     // drawGrid();
-
-    for (const s of strokes) {
-        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-        ctx.lineWidth = s.width;
-        ctx.strokeStyle = s.id === selectedId ? '#8ef' : '#cfe4ff';
-        ctx.globalAlpha = s.id === selectedId ? 1 : 0.9;
-        ctx.beginPath();
-        const pts = s.points;
-        if (!pts.length) continue;
-        const pointerHasPressure = (pts[0].press !== 0.5)
-        // ctx.moveTo(pts[0].x, pts[0].y);
-        let lastX = pts[0].x
-        let lastY = pts[0].y
-        for (let i = 1; i < pts.length; i++) {
-            const t = i/pts.length
-            ctx.lineWidth = pointerHasPressure ? s.width * 2 * pts[i].press: zProfile(t, 0, s.width)
-            // console.log(t, ctx.lineWidth)
-            ctx.beginPath();
-            ctx.moveTo(lastX, lastY);
-            ctx.lineTo(pts[i].x, pts[i].y);
-            // ctx.arc(pts[i].x, pts[i].y, s.width*pts[i].press, 0, Math.PI * 2, false);
-            ctx.fillStyle = "green";
-            // ctx.fill();
-            ctx.closePath();
-            lastX = pts[i].x
-            lastY = pts[i].y 
-            ctx.stroke();
-            // ctx.lineTo(pts[i].x, pts[i].y);
+    if (stroke) {
+        paint(stroke)
+    }
+    else {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, img.width*imgScale, img.height*imgScale);
+        for (const s of strokes) {
+            paint(s)
         }
-        ctx.stroke();
     }
 
     if (tool === 'select' && hoverPos) {
@@ -293,7 +301,7 @@ function refreshList() {
         const d = document.createElement('div');
         d.textContent = `Mark ${i + 1}  (${s.points.length} pts, width ${s.width}px)`;
         d.className = (s.id === selectedId) ? 'active' : '';
-        d.onclick = () => { selectedId = s.id; drawAll(); refreshList(); };
+        d.onclick = () => { selectedId = s.id; drawAll(s); refreshList(); };
         d.ondblclick = () => { if (confirm('Delete this mark?')) { selectedId = s.id; deleteSelected(); } };
         // marksDiv.appendChild(d);
     });
@@ -350,7 +358,7 @@ function generateGCode(strokes, feed) {
     initBrushMachineRotation()
     strokes.forEach((s, idx) => {
         if (!s.points || s.points.length < 5) return;
-        const pts = smooth2D(s.points.map(pxToMm));
+        const pts = smooth2D(smooth2D(smooth2D(s.points.map(pxToMm))));
         const { L, total } = cumulativeLengths(pts);
         if (total <= 0) return;
 
@@ -405,8 +413,8 @@ function generateGCode(strokes, feed) {
             }
         }
         // ensure end at Z is pen up 
-        const end = pts[pts.length - 1];
-        lines.push(`G1 X${end.x.toFixed(2)} Y${end.y.toFixed(2)} Z${zsafe().toFixed(2)} F${feed.toFixed(0)}`);
+        const [endx, endy, _endz] = inBounds([pts[pts.length - 1].x, pts[pts.length - 1].y, pts[pts.length - 1].z]);
+        lines.push(`G1 X${endx.toFixed(2)} Y${endy.toFixed(2)} Z${zsafe().toFixed(2)} F${feed.toFixed(0)}`);
         // lines.push(`G0 Z${ztop().toFixed(3)}`);
     });
     lines.push(`\nG0 Z${zsafe().toFixed(2)}`);
@@ -486,7 +494,6 @@ function brushMachineRotation(brushRotationRad) {
 function rotAdjustedFeedRate(da, of) {
     return of+Math.abs(da*23)
 }
-
 
 function smooth2D(points) {
     const shmoo = [points[0], average3Pts(points[0], points[1], points[2]), average3Pts(points[1], points[2], points[3])];

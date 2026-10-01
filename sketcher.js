@@ -364,22 +364,14 @@ function generateGCode(strokes, feed) {
 
         const start = pts[0];
 
-        // lines.push(`\n; ---- Dip ${idx + 1} ----`);
-        // lines.push(`G0 Z${ztop().toFixed(3)}`);
-        // const palY = lerp(PAL_Y_MIN, PAL_Y_MAX, Math.random())
-        // lines.push(`G0 X${(PAL_MM_W - 10).toFixed(2)} Y${palY.toFixed(2)}`);
-        // lines.push(`G1 X${(PAL_MM_W - 14).toFixed(2)} Z${palette_bottom.toFixed(2)} F${feed.toFixed(0)}`);
-        // lines.push(`G1 X0 F${feed}`);
-        // lines.push(`G1 Z${ztop().toFixed(3)} F${feed.toFixed(0)}`);
-        // lines.push(`G0 X${(PAL_MM_W - 10).toFixed(2)} Y${palY.toFixed(2)}`);
-        // lines.push(`G1 X${(PAL_MM_W - 14).toFixed(2)} Z${palette_bottom.toFixed(2)} F${feed.toFixed(0)}`);
-        // lines.push(`G1 X0 Y${PAL_Y_MIN.toFixed(2)} F${feed.toFixed(0)}`);
-        // lines.push(`G1 Z${ztop().toFixed(3)} F${feed}`);
-        // lines.push(`G0 X${(PAL_MM_W - 10).toFixed(2)} Y${palY.toFixed(2)}`);
-        // lines.push(`G1 X${(PAL_MM_W - 14).toFixed(2)} Z${palette_bottom.toFixed(2)} F${feed.toFixed(0)}`);
-        // lines.push(`G1 X0 Y${PAL_Y_MAX.toFixed(2)} F${feed.toFixed(0)}`);
-        // lines.push(`G1 Z${ztop().toFixed(3)} F${feed}`);
-
+        if (idx % 3 === 0) {
+            lines.push(`\n; ---- Dip ${idx + 1} ----`);
+            lines.push(`G0 Z${ztop().toFixed(3)}`);
+            const palY = lerp(PAL_Y_MIN, PAL_Y_MAX, Math.random())
+            lines.push(`G0 X${(PAL_MM_W - 14).toFixed(2)} Y${palY.toFixed(2)}`);
+            lines.push(`G1 X${(PAL_MM_W - 10).toFixed(2)} Z${palette_bottom.toFixed(2)} F${feed.toFixed(0)}`);
+            lines.push(`G1 Z${ztop().toFixed(3)} F${feed}`);
+        }
         lines.push(`\n; ---- Mark ${idx + 1} ----`);
         lines.push(`G0 Z${zsafe().toFixed(2)}`);
         if (hasAAxis) {

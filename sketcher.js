@@ -25,7 +25,7 @@ const ctx = canvas.getContext('2d');
 
 const HAL = [ // v (vertical) is defined from the paper so negative dimensions indicate the paper is not at 0 
     {w: 335, h: 295, v:100, ztop: 10, hasAAxis: true, name: "ncnc Brush" },
-    {w: 150, h: -100, v:16, ztop: 3.4, hasAAxis: false, name: "Axidraw Mini-Kit 2"},
+    {w: 150, h: 100, v:16, ztop: 3.4, hasAAxis: false, name: "Axidraw Mini-Kit 2"},
 ];
 let hali = 0; // hardware abstraction layer index number
 const MM_W = () => HAL[hali].w; // machine work area (mm) 

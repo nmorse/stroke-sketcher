@@ -17,6 +17,7 @@ function pointLineDistance(p, a, b) {
 // === App State ===
 let img = new Image();
 let imgLoaded = false;
+let imgFileName = "none loaded";
 let imgScale = 1;
 const fileInput = document.getElementById('fileInput');
 const canvas = document.getElementById('canvas');
@@ -24,8 +25,8 @@ const ctx = canvas.getContext('2d');
 // const marksDiv = document.getElementById('marks');
 
 const HAL = [ // v (vertical) is defined from the paper so negative dimensions indicate the paper is not at 0 
-    {w: 335, h: 295, v:100, ztop: 10, hasAAxis: true, name: "ncnc Brush" },
-    {w: 150, h: 100, v:16, ztop: 3.4, hasAAxis: false, name: "Axidraw Mini-Kit 2"},
+    {w: 335, h: 295, v:100, ztop: 10, zsafe: 60, palette_bottom: 50, hasAAxis: true, name: "ncnc Brush" },
+    {w: 150, h: 100, v:-16, ztop: 6, zsafe: 2, palette_bottom: 12, hasAAxis: false, name: "Axidraw Mini-Kit 2"},
 ];
 let hali = 0; // hardware abstraction layer index number
 const MM_W = () => HAL[hali].w; // machine work area (mm) 
@@ -36,11 +37,11 @@ const PAL_Y_MIN = 20, PAL_Y_MAX = 30; // palette Y axis bounds
 const mmPerPxX = () => (MM_W() - PAL_MM_W) / canvas.width;  // 140 / 840 = 0.1667 mm/px
 const mmPerPxY = () =>  MM_H() / canvas.height; // 100 / 600 = 0.1667 mm/px
 const ztop = () => HAL[hali].ztop;
-const zsafe = () => ztop() + 50;
+const zsafe = () => HAL[hali].zsafe;
 const descent = 0.1; // percent of t
 const ascent = 0.9;  // percent
-const bottom = 2;
-const palette_bottom = 50;
+const bottom = () => HAL[hali].v<0? -HAL[hali].v-2: 2;
+const palette_bottom = () => HAL[hali].palette_bottom;//50;
 let tool = 'draw'; // 'draw' | 'select'
 let strokes = [];   // {id, width, points:[{x,y}], selected:false}
 let selectedId = null;
@@ -76,6 +77,8 @@ fileInput.addEventListener('change', () => {
     const reader = new FileReader();
     reader.onload = (e) => {
         const url = e.target.result;
+        console.log(file.name)
+        imgFileName = file.name;
         const newImg = new Image();
         newImg.onload = () => {
             img = newImg;
@@ -95,7 +98,31 @@ function setTool(next) {
     canvas.style.cursor = tool === 'draw' ? 'crosshair' : 'pointer';
 }
 
-toolDraw.onclick = () => setTool('draw');
+window.onscroll = function() {
+  scrollFunction();
+};
+
+function scrollFunction() {
+  const header = document.getElementById("header");
+  console.log(document.body.scrollTop, document.documentElement.scrollTop)
+  if (document.body.scrollTop > 0 || document.documentElement.scrollTop > 0) {
+    // header.style.padding = "20px 10px"; // Reduced padding
+    // header.style.fontSize = "4px"; // Reduced font size
+    header.style.display = "none"; // hide
+
+  } else {
+    // header.style.padding = "50px 10px"; // Original padding
+    // header.style.fontSize = "120px"; // Original font size
+    header.style.display = "block"; // show
+  }
+}
+
+
+// header.onclick = () => expandHeader();
+toolDraw.onclick = (e) => { 
+    setTool('draw')
+    shrinkHeader(e)
+};
 toolSelect.onclick = () => setTool('select');
 
 widthInput.addEventListener('input', () => {
@@ -330,7 +357,7 @@ function inBounds(pt3) {
 }
 
 function zPressure(pressure) {
-    return lerp(ztop(), bottom, pressure)
+    return lerp(ztop(), bottom(), pressure)
 }
 
 function zProfile(t, top, bot) {
@@ -367,9 +394,9 @@ function generateGCode(strokes, feed) {
         if (idx % 3 === 0) {
             lines.push(`\n; ---- Dip ${idx + 1} ----`);
             lines.push(`G0 Z${ztop().toFixed(3)}`);
-            const palY = lerp(PAL_Y_MIN, PAL_Y_MAX, Math.random())
+            const palY = lerp(PAL_Y_MIN, PAL_Y_MAX, 0.5) // Math.random())
             lines.push(`G0 X${(PAL_MM_W - 14).toFixed(2)} Y${palY.toFixed(2)}`);
-            lines.push(`G1 X${(PAL_MM_W - 10).toFixed(2)} Z${palette_bottom.toFixed(2)} F${feed.toFixed(0)}`);
+            lines.push(`G1 X${(PAL_MM_W - 10).toFixed(2)} Z${palette_bottom().toFixed(2)} F${feed.toFixed(0)}`);
             lines.push(`G1 Z${ztop().toFixed(3)} F${feed}`);
         }
         lines.push(`\n; ---- Mark ${idx + 1} ----`);
@@ -389,7 +416,7 @@ function generateGCode(strokes, feed) {
         for (let i = 1; i < pts.length; i++) {
 
             const t = L[i] / total; // 0..1 progress along this mark
-            const pz = pointerHasPressure? zPressure(s.points[i].press) : zProfile(t, ztop(), bottom);
+            const pz = pointerHasPressure? zPressure(s.points[i].press) : zProfile(t, ztop(), bottom());
             // console.log(t, pz)
             const p = pts[i];
             if (hasAAxis) {
@@ -415,6 +442,15 @@ function generateGCode(strokes, feed) {
     }
     lines.push('G0 X0 Y0');
     lines.push('M2 ; program end');
+    lines.push(`; HAL:${JSON.stringify(HAL[hali])}`);
+    lines.push(`; target:${imgFileName}`);
+    const printStokes = strokes.map((s)=>{return{"width":s.width,"points":s.points.map(p=>{return[p.x, p.y, p.press]})}})
+    lines.push(`; {strokes:[`);
+    for (const ps of printStokes) {
+        lines.push(`;  ${JSON.stringify(ps, null, '')},`);
+    }
+    lines.push(`; ]}`);
+
     return lines.join('\n');
 }
 

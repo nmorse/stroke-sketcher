@@ -156,7 +156,7 @@
 </head>
 
 <body>
-    <header class="row">
+    <header class="row" id="header">
         <label>
             Upload image
             <input id="fileInput" type="file" accept="image/*" />
@@ -192,13 +192,7 @@
             <!-- Canvas is set so that its pixel width maps to 150mm and height to 100mm -->
             <canvas id="canvas" width="720" height="600"></canvas>
         </section>
-
     </main>
-
-    <footer>
-        The canvas is <em>720×600 px</em>, mapping to palette area and <em>140×100 mm</em> ⇒ <strong>0.1667
-            mm/px</strong>.
-    </footer>
 
     <script src="sketcher.js"></script>
 </body>

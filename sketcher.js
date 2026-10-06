@@ -32,9 +32,9 @@ let hali = 0; // hardware abstraction layer index number
 const MM_W = () => HAL[hali].w; // machine work area (mm) 
 const MM_H = () => HAL[hali].h;
 const MM_V = () => HAL[hali].v;
-const PAL_MM_W = 30;
+const PAL_MM_W = 10;
 const PAL_Y_MIN = 20, PAL_Y_MAX = 30; // palette Y axis bounds
-const mmPerPxX = () => (MM_W() - PAL_MM_W) / canvas.width;  // 140 / 840 = 0.1667 mm/px
+const mmPerPxX = () =>  MM_W() / canvas.width;  // 140 / 840 = 0.1667 mm/px
 const mmPerPxY = () =>  MM_H() / canvas.height; // 100 / 600 = 0.1667 mm/px
 const ztop = () => HAL[hali].ztop;
 const zsafe = () => HAL[hali].zsafe;
@@ -393,11 +393,11 @@ function generateGCode(strokes, feed) {
 
         if (idx % 3 === 0) {
             lines.push(`\n; ---- Dip ${idx + 1} ----`);
-            lines.push(`G0 Z${ztop().toFixed(3)}`);
+            lines.push(`G0 Z${ztop().toFixed(2)}`);
             const palY = lerp(PAL_Y_MIN, PAL_Y_MAX, 0.5) // Math.random())
-            lines.push(`G0 X${(PAL_MM_W - 14).toFixed(2)} Y${palY.toFixed(2)}`);
-            lines.push(`G1 X${(PAL_MM_W - 10).toFixed(2)} Z${palette_bottom().toFixed(2)} F${feed.toFixed(0)}`);
-            lines.push(`G1 Z${ztop().toFixed(3)} F${feed}`);
+            lines.push(`G0 X0 Y${palY.toFixed(2)}`);
+            lines.push(`G1 X${(PAL_MM_W).toFixed(2)} Z${palette_bottom().toFixed(2)} F${feed.toFixed(0)}`);
+            lines.push(`G1 Z${ztop().toFixed(2)} F${feed}`);
         }
         lines.push(`\n; ---- Mark ${idx + 1} ----`);
         lines.push(`G0 Z${zsafe().toFixed(2)}`);

@@ -212,9 +212,10 @@ canvas.addEventListener('pointerleave', () => { drawing = false; lastPt = null; 
 
 function getPos(e) {
     const r = canvas.getBoundingClientRect();
+    const press = e.pressure ?? 0.5
     return { x: (e.clientX - r.left) * (canvas.width / r.width), 
              y: (e.clientY - r.top) * (canvas.height / r.height),
-             press: e.pressure,
+             press,
              tiltX: e.tiltX,
              tiltY: e.tiltY,
              timeStamp: e.timeStamp

@@ -19,6 +19,7 @@ let img = new Image();
 let imgLoaded = false;
 let imgFileName = "none loaded";
 let imgScale = 1;
+let paintColor = "#ffffff"
 const fileInput = document.getElementById('fileInput');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
@@ -54,6 +55,7 @@ const el = id => document.getElementById(id);
 const toolDraw = el('toolDraw');
 const toolSelect = el('toolSelect');
 const widthInput = el('width');
+const colorPicker = el('colorPicker');
 const widthOut = el('widthOut');
 const feedInput = el('feed');
 const exportBtn = el('export');
@@ -152,7 +154,11 @@ function setCanvasToHAL() {
 
 undoBtn.onclick = () => { if (strokes.length) { strokes.pop(); selectedId = null; drawAll(); refreshList(); } };
 clearBtn.onclick = () => { if (confirm('Clear all marks?')) { strokes = []; selectedId = null; drawAll(); refreshList(); } };
+colorPicker.addEventListener("change", watchColorPicker);
 
+function watchColorPicker(event) {
+  paintColor = event.target.value;
+}
 exportBtn.onclick = () => {
     const g = generateGCode(strokes, parseFloat(feedInput.value) || 800);
     downloadText(g, 'canvas_export.gcode');
@@ -173,7 +179,7 @@ canvas.addEventListener('pointerdown', (e) => {
         const pos = getPos(e);
         if (tool === 'draw') {
             drawing = true; canvas.setPointerCapture(e.pointerId);
-            const stroke = { id: crypto.randomUUID(), width: parseFloat(widthInput.value) | 0 || 3, points: [pos], selected: false };
+            const stroke = { id: crypto.randomUUID(), color: paintColor, width: parseFloat(widthInput.value) | 0 || 3, points: [pos], selected: false };
             strokes.push(stroke);
             lastPt = pos; drawAll(stroke); refreshList();
         } else {
@@ -215,11 +221,11 @@ function getPos(e) {
             };
 }
 
-function paint(s) {
+function paint(s, c = "#ffffff") {
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.lineWidth = s.width;
-    ctx.strokeStyle = s.id === selectedId ? '#8ef' : '#cfe4ff';
-    ctx.globalAlpha = s.id === selectedId ? 1 : 0.9;
+    ctx.strokeStyle = s.id === selectedId ? '#8ef' : s.color;
+    ctx.globalAlpha = s.id === selectedId ? 1 : 0.8;
     ctx.beginPath();
     const pts = s.points;
     if (!pts.length) return;
@@ -251,7 +257,7 @@ function drawAll(stroke=null, hoverPos = null) {
     // draw a faint mm grid every 10 mm
     // drawGrid();
     if (stroke) {
-        paint(stroke)
+        paint(stroke, paintColor)
     }
     else {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -383,23 +389,30 @@ function generateGCode(strokes, feed) {
     }
 
     initBrushMachineRotation()
-    strokes.forEach((s, idx) => {
+    lastColor = null
+    let i = -1
+    strokes.forEach((s) => {
         if (!s.points || s.points.length < 5) return;
         const pts = smooth2D(smooth2D(smooth2D(s.points.map(pxToMm))));
         const { L, total } = cumulativeLengths(pts);
         if (total <= 0) return;
 
         const start = pts[0];
+        i += 1
 
-        if (idx % 3 === 0) {
-            lines.push(`\n; ---- Dip ${idx + 1} ----`);
+        if (i % 3 === 0 || lastColor !== s.color) {
+            lines.push(`\n; ---- Dip ${i + 1} in color ${s.color} ----`);
+            if (lastColor !== s.color) {
+                lines.push('M00')
+            }
             lines.push(`G0 Z${zsafe().toFixed(2)}`);
             const palY = lerp(PAL_Y_MIN, PAL_Y_MAX, 0.5) // Math.random())
             lines.push(`G0 X0 Y${palY.toFixed(2)}`);
             lines.push(`G1 X${(PAL_MM_W).toFixed(2)} Z${palette_bottom().toFixed(2)} F${feed.toFixed(0)}`);
             lines.push(`G1 Z${zsafe().toFixed(2)} F${feed}`);
         }
-        lines.push(`\n; ---- Mark ${idx + 1} ----`);
+        lastColor = s.color
+        lines.push(`\n; ---- Mark ${i + 1} ----`);
         lines.push(`G0 Z${zsafe().toFixed(2)}`);
         if (hasAAxis) {
             const r = angle(pts[1].x - pts[0].x, pts[1].y - pts[0].y)
@@ -444,7 +457,7 @@ function generateGCode(strokes, feed) {
     lines.push('M2 ; program end');
     lines.push(`; HAL:${JSON.stringify(HAL[hali])}`);
     lines.push(`; target:${imgFileName}`);
-    const printStokes = strokes.map((s)=>{return{"width":s.width,"points":s.points.map(p=>{return[p.x, p.y, p.press]})}})
+    const printStokes = strokes.map((s)=>{return{"width":s.width,"color":s.color,"points":s.points.map(p=>{return[p.x, p.y, p.press]})}})
     lines.push(`; {strokes:[`);
     for (const ps of printStokes) {
         lines.push(`;  ${JSON.stringify(ps, null, '')},`);

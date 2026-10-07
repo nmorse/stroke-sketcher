@@ -26,7 +26,7 @@ const ctx = canvas.getContext('2d');
 
 const HAL = [ // v (vertical) is defined from the paper so negative dimensions indicate the paper is not at 0 
     {w: 335, h: 295, v:100, ztop: 10, zsafe: 60, palette_bottom: 50, hasAAxis: true, name: "ncnc Brush" },
-    {w: 150, h: 100, v:-16, ztop: 6, zsafe: 2, palette_bottom: 12, hasAAxis: false, name: "Axidraw Mini-Kit 2"},
+    {w: 150, h: 100, v:-16, ztop: 6, zsafe: 0, palette_bottom: 12, hasAAxis: false, name: "Axidraw Mini-Kit 2"},
 ];
 let hali = 0; // hardware abstraction layer index number
 const MM_W = () => HAL[hali].w; // machine work area (mm) 
@@ -393,11 +393,11 @@ function generateGCode(strokes, feed) {
 
         if (idx % 3 === 0) {
             lines.push(`\n; ---- Dip ${idx + 1} ----`);
-            lines.push(`G0 Z${ztop().toFixed(2)}`);
+            lines.push(`G0 Z${zsafe().toFixed(2)}`);
             const palY = lerp(PAL_Y_MIN, PAL_Y_MAX, 0.5) // Math.random())
             lines.push(`G0 X0 Y${palY.toFixed(2)}`);
             lines.push(`G1 X${(PAL_MM_W).toFixed(2)} Z${palette_bottom().toFixed(2)} F${feed.toFixed(0)}`);
-            lines.push(`G1 Z${ztop().toFixed(2)} F${feed}`);
+            lines.push(`G1 Z${zsafe().toFixed(2)} F${feed}`);
         }
         lines.push(`\n; ---- Mark ${idx + 1} ----`);
         lines.push(`G0 Z${zsafe().toFixed(2)}`);

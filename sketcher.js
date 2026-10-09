@@ -19,30 +19,43 @@ let img = new Image();
 let imgLoaded = false;
 let imgFileName = "none loaded";
 let imgScale = 1;
-let paintColor = "#ffffff"
+let paintColor = "#444444"
 const fileInput = document.getElementById('fileInput');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 // const marksDiv = document.getElementById('marks');
 
-const HAL = [ // v (vertical) is defined from the paper so negative dimensions indicate the paper is not at 0 
-    {w: 335, h: 295, v:100, ztop: 10, zsafe: 60, palette_bottom: 50, hasAAxis: true, name: "ncnc Brush" },
-    {w: 150, h: 100, v:-16, ztop: 6, zsafe: 0, palette_bottom: 12, hasAAxis: false, name: "Axidraw Mini-Kit 2"},
+const HAL = [ // v (vertical) note a negative value indicates the paper is not at 0, but instead at -v 
+    {w: 335, h: 295, v:100, zsafe: 60, palette_bottom: 50, hasAAxis: true, name: "ncnc Brush",
+        brush: [
+            {zrange: 7, shape: "round", width: 6}, 
+            {zrange: 5, shape: "flat", width: 12}
+        ]
+
+    },
+    {w: 150, h: 100, v:-16, zsafe: 0, palette_bottom: 12, hasAAxis: false, name: "Axidraw Mini-Kit 2",
+        brush: [
+            {zrange: 4, yoffset: -1.2, shape: "round", width: 3}, 
+            {zrange: 5, shape: "round", width: 5}
+        ]
+    },
 ];
 let hali = 0; // hardware abstraction layer index number
+let brushi = 0; // brush index number
 const MM_W = () => HAL[hali].w; // machine work area (mm) 
 const MM_H = () => HAL[hali].h;
-const MM_V = () => HAL[hali].v;
+const MM_V = () => HAL[hali].v; // if negative, inverted (positive down)
 const PAL_MM_W = 10;
 const PAL_Y_MIN = 20, PAL_Y_MAX = 30; // palette Y axis bounds
 const mmPerPxX = () =>  MM_W() / canvas.width;  // 140 / 840 = 0.1667 mm/px
 const mmPerPxY = () =>  MM_H() / canvas.height; // 100 / 600 = 0.1667 mm/px
-const ztop = () => HAL[hali].ztop;
-const zsafe = () => HAL[hali].zsafe;
+const zbottom = () => HAL[hali].v<0? -HAL[hali].v-2: 2;
+const ztop = () =>    HAL[hali].v<0? zbottom()-HAL[hali].brush[brushi].zrange: zbottom()+HAL[hali].brush[brushi].zrange;
+const zclear = () =>  HAL[hali].v<0? ztop()-3: ztop()+3;
+const zsafe = () =>   HAL[hali].v<0? Math.min(HAL[hali].zsafe, zclear()): Math.max(HAL[hali].zsafe, zclear());
 const descent = 0.1; // percent of t
 const ascent = 0.9;  // percent
-const bottom = () => HAL[hali].v<0? -HAL[hali].v-2: 2;
-const palette_bottom = () => HAL[hali].palette_bottom;//50;
+const palette_bottom = () => HAL[hali].palette_bottom; // z axis brush dip depth
 let tool = 'draw'; // 'draw' | 'select'
 let strokes = [];   // {id, width, points:[{x,y}], selected:false}
 let selectedId = null;
@@ -64,6 +77,7 @@ const clearBtn = el('clear');
 const pointStepInput = el('pointStep');
 const pointStepOut = el('pointStepOut');
 const HALNumberInput = el('HALNumber');
+const brushNumberInput = el('brushNumber');
 
 function setImgParams() {
     const imgAspect = img.width / img.height
@@ -140,6 +154,12 @@ HALNumberInput.addEventListener('input', () => {
         hali = 0;
     setCanvasToHAL()
 });
+brushNumberInput.addEventListener('input', () => {
+    brushi = parseInt(brushNumberInput.value) - 1;
+    if (brushi < 0 || brushi >= HAL[hali].brush.length)
+        brushi = 0;
+    setCanvasToBrush()
+});
 
 function setCanvasToHAL() {
     const w = Math.abs(HAL[hali].w*2)
@@ -150,6 +170,9 @@ function setCanvasToHAL() {
     canvas.height = h
     canvas.style.height = `${h}px`
     //console.log(h)
+}
+function setCanvasToBrush() {
+    console.log("canvas action on brush change TBD")
 }
 
 undoBtn.onclick = () => { if (strokes.length) { strokes.pop(); selectedId = null; drawAll(); refreshList(); } };
@@ -242,7 +265,7 @@ function paint(s, c = "#ffffff") {
         ctx.moveTo(lastX, lastY);
         ctx.lineTo(pts[i].x, pts[i].y);
         // ctx.arc(pts[i].x, pts[i].y, s.width*pts[i].press, 0, Math.PI * 2, false);
-        ctx.fillStyle = "green";
+        // ctx.fillStyle = "green";
         // ctx.fill();
         ctx.closePath();
         lastX = pts[i].x
@@ -257,6 +280,8 @@ function drawAll(stroke=null, hoverPos = null) {
     
     // draw a faint mm grid every 10 mm
     // drawGrid();
+    ctx.fillStyle = "#fefefe";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     if (stroke) {
         paint(stroke, paintColor)
     }
@@ -364,7 +389,7 @@ function inBounds(pt3) {
 }
 
 function zPressure(pressure) {
-    return lerp(ztop(), bottom(), pressure)
+    return lerp(ztop(), zbottom(), pressure)
 }
 
 function zProfile(t, top, bot) {
@@ -417,12 +442,12 @@ function generateGCode(strokes, feed) {
         lines.push(`G0 Z${zsafe().toFixed(2)}`);
         if (hasAAxis) {
             const r = angle(pts[1].x - pts[0].x, pts[1].y - pts[0].y)
-            const [x, y, z] = inBounds(offsetPt(start.x, start.y, ztop(), r))
+            const [x, y, z] = inBounds(offsetPt(start.x, start.y, zclear(), r))
             const a = brushMachineRotation(r)
             lines.push(`G0 X${x.toFixed(2)} Y${y.toFixed(2)} Z${(z+5).toFixed(2)} A${a.toFixed(1)}`);
         }
         else {
-            lines.push(`G0 X${start.x.toFixed(2)} Y${start.y.toFixed(2)}`);
+            lines.push(`G0 X${start.x.toFixed(2)} Y${start.y.toFixed(2)} Z${zclear().toFixed(2)}`);
         }
         const pointerHasPressure = (s.points[0].press !== 0.5)
 
@@ -430,7 +455,7 @@ function generateGCode(strokes, feed) {
         for (let i = 1; i < pts.length; i++) {
 
             const t = L[i] / total; // 0..1 progress along this mark
-            const pz = pointerHasPressure? zPressure(s.points[i].press) : zProfile(t, ztop(), bottom());
+            const pz = pointerHasPressure? zPressure(s.points[i].press) : zProfile(t, ztop(), zbottom());
             // console.log(t, pz)
             const p = pts[i];
             if (hasAAxis) {
@@ -447,8 +472,8 @@ function generateGCode(strokes, feed) {
         }
         // ensure end at Z is pen up 
         const [endx, endy, _endz] = inBounds([pts[pts.length - 1].x, pts[pts.length - 1].y, pts[pts.length - 1].z]);
-        lines.push(`G1 X${endx.toFixed(2)} Y${endy.toFixed(2)} Z${zsafe().toFixed(2)} F${feed.toFixed(0)}`);
-        // lines.push(`G0 Z${ztop().toFixed(3)}`);
+        lines.push(`G1 X${endx.toFixed(2)} Y${endy.toFixed(2)} Z${zclear().toFixed(2)} F${feed.toFixed(0)}`);
+        // lines.push(`G0 Z${zclear().toFixed(3)}`);
     });
     lines.push(`\nG0 Z${zsafe().toFixed(2)}`);
     if (hasAAxis) {
@@ -458,7 +483,7 @@ function generateGCode(strokes, feed) {
     lines.push('M2 ; program end');
     lines.push(`; HAL:${JSON.stringify(HAL[hali])}`);
     lines.push(`; target:${imgFileName}`);
-    const printStokes = strokes.map((s)=>{return{"width":s.width,"color":s.color,"points":s.points.map(p=>{return[p.x, p.y, p.press]})}})
+    const printStokes = strokes.map((s)=>{return{"width":s.width,"color":s.color,"points":s.points.map(p=>{return[precision(p.x, 2), precision(p.y, 2), p.press]})}})
     lines.push(`; {strokes:[`);
     for (const ps of printStokes) {
         lines.push(`;  ${JSON.stringify(ps, null, '')},`);
@@ -466,6 +491,10 @@ function generateGCode(strokes, feed) {
     lines.push(`; ]}`);
 
     return lines.join('\n');
+}
+function precision(v, p) {
+    const i = Math.round(v*p*10)
+    return i/(p*10)
 }
 
 // initial paint

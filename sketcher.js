@@ -35,7 +35,7 @@ const HAL = [ // v (vertical) note a negative value indicates the paper is not a
     },
     {w: 150, h: 100, v:-16, zsafe: 0, palette_bottom: 12, hasAAxis: false, name: "Axidraw Mini-Kit 2",
         brush: [
-            {zrange: 4, yoffset: -1.2, shape: "round", width: 3}, 
+            {zrange: 2, yoffset: -1.2, shape: "pen", width: 1}, 
             {zrange: 5, shape: "round", width: 5}
         ]
     },
@@ -280,13 +280,14 @@ function drawAll(stroke=null, hoverPos = null) {
     
     // draw a faint mm grid every 10 mm
     // drawGrid();
-    ctx.fillStyle = "#fefefe";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
     if (stroke) {
         paint(stroke, paintColor)
     }
     else {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#fefefe";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, img.width*imgScale, img.height*imgScale);
         for (const s of strokes) {
             paint(s)
@@ -426,7 +427,7 @@ function generateGCode(strokes, feed) {
         const start = pts[0];
         i += 1
 
-        if (i % 3 === 0 || lastColor !== s.color) {
+        if (HAL[hali].brush[brushi].shape !== 'pen' && (i % 3 === 0 || lastColor !== s.color)) {
             lines.push(`\n; ---- Dip ${i + 1} in color ${s.color} ----`);
             if (lastColor !== s.color) {
                 lines.push('M00')
@@ -436,10 +437,12 @@ function generateGCode(strokes, feed) {
             lines.push(`G0 X0 Y${palY.toFixed(2)}`);
             lines.push(`G1 X${(PAL_MM_W).toFixed(2)} Z${palette_bottom().toFixed(2)} F${feed.toFixed(0)}`);
             lines.push(`G1 Z${zsafe().toFixed(2)} F${feed}`);
+            lines.push(`G1 X${(PAL_MM_W+4).toFixed(2)} F${feed}`);            
+            lines.push(`G1 Z${zclear().toFixed(2)} F${feed}`);
         }
         lastColor = s.color
         lines.push(`\n; ---- Mark ${i + 1} ----`);
-        lines.push(`G0 Z${zsafe().toFixed(2)}`);
+        lines.push(`G0 Z${zclear().toFixed(2)}`);
         if (hasAAxis) {
             const r = angle(pts[1].x - pts[0].x, pts[1].y - pts[0].y)
             const [x, y, z] = inBounds(offsetPt(start.x, start.y, zclear(), r))

@@ -93,7 +93,7 @@ fileInput.addEventListener('change', () => {
     const reader = new FileReader();
     reader.onload = (e) => {
         const url = e.target.result;
-        console.log(file.name)
+        // console.log(file.name)
         imgFileName = file.name;
         const newImg = new Image();
         newImg.onload = () => {
@@ -120,7 +120,7 @@ window.onscroll = function() {
 
 function scrollFunction() {
   const header = document.getElementById("header");
-  console.log(document.body.scrollTop, document.documentElement.scrollTop)
+  // console.log(document.body.scrollTop, document.documentElement.scrollTop)
   if (document.body.scrollTop > 0 || document.documentElement.scrollTop > 0) {
     // header.style.padding = "20px 10px"; // Reduced padding
     // header.style.fontSize = "4px"; // Reduced font size
@@ -289,6 +289,38 @@ function drawAll(stroke=null, hoverPos = null) {
         ctx.fillStyle = "#fefefe";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, img.width*imgScale, img.height*imgScale);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const pixels = imageData.data;
+
+        const blue = true;
+        for (let i = 0; i < pixels.length; i += 4) {
+            const r = pixels[i]
+            const g = pixels[i+1]
+            const b = pixels[i+2]
+            const m = Math.floor((r + b)/2)
+            const c = Math.floor((b + g)/2)
+            const y = Math.floor(r*0.6 + g*0.4)
+            const b_paint = Math.floor((255 - y)*0.7 + b*0.3)
+            const y_paint = Math.floor((255 - b)*0.6 + y*0.4)
+            // const y_paint = (255 - b)
+            const y_p = y_paint // *1.1 - b_paint*0.1
+            const b_p = b_paint // *0.9 - y_p*1.1
+            if (blue) {
+                pixels[i] =     nP(255 - b_p); // Red
+                pixels[i + 1] = nP(255 - b_p); // Green
+                pixels[i + 2] = nP(255 - b_p + 32); // Blue
+            }
+            else {
+                pixels[i] =     nP(255 - y_p + 32); // Red
+                pixels[i + 1] = nP(255 - y_p + 16); // Green
+                pixels[i + 2] = nP(255 - y_p); // Blue
+            }
+
+            // pixels[i + 3] is alpha; leave it unchanged
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+
         for (const s of strokes) {
             paint(s)
         }
@@ -312,6 +344,9 @@ function drawAll(stroke=null, hoverPos = null) {
 
     // border
     ctx.strokeStyle = '#1e2a55'; ctx.lineWidth = 2; ctx.strokeRect(0, 0, canvas.width, canvas.height);
+}
+function nP(pv) {
+    return Math.max(0, Math.min(255, pv))
 }
 
 function drawGrid() {

@@ -19,7 +19,7 @@ let img = new Image();
 let imgLoaded = false;
 let imgFileName = "none loaded";
 let imgScale = 1;
-let paintColor = "#444444"
+let paintColor = "#ffdd00"
 const fileInput = document.getElementById('fileInput');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
@@ -284,7 +284,7 @@ function drawAll(stroke=null, hoverPos = null) {
     if (stroke) {
         paint(stroke, paintColor)
     }
-    else {
+    else { // display image, filtered by color then draw all strokes
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "#fefefe";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -294,28 +294,24 @@ function drawAll(stroke=null, hoverPos = null) {
 
         const blue = true;
         for (let i = 0; i < pixels.length; i += 4) {
-            const r = pixels[i]
-            const g = pixels[i+1]
-            const b = pixels[i+2]
-            const m = Math.floor((r + b)/2)
-            const c = Math.floor((b + g)/2)
-            const y = Math.floor(r*0.6 + g*0.4)
-            const b_paint = Math.floor((255 - y)*0.7 + b*0.3)
-            const y_paint = Math.floor((255 - b)*0.6 + y*0.4)
-            // const y_paint = (255 - b)
-            const y_p = y_paint // *1.1 - b_paint*0.1
-            const b_p = b_paint // *0.9 - y_p*1.1
+            const r = pixels[i]/255
+            const g = pixels[i+1]/255
+            const b = pixels[i+2]/255
+            const [c, m, y] = toSubtractive(r, g, b)
+            const b_paint = c*0.8 + m*0.2 // (c + m)/2
+            const y_paint = y*0.9 + m*0.1
+            const y_p = 1-y_paint 
+            const b_p = 1-b_paint 
             if (blue) {
-                pixels[i] =     nP(255 - b_p); // Red
-                pixels[i + 1] = nP(255 - b_p); // Green
-                pixels[i + 2] = nP(255 - b_p + 32); // Blue
+                pixels[i] =     bP(b_p*255); // Red
+                pixels[i + 1] = bP(b_p*255); // Green
+                pixels[i + 2] = bP(b_p*255 + 32); // Blue
             }
             else {
-                pixels[i] =     nP(255 - y_p + 32); // Red
-                pixels[i + 1] = nP(255 - y_p + 16); // Green
-                pixels[i + 2] = nP(255 - y_p); // Blue
+                pixels[i] =     bP(y_p*255 + 32); // Red
+                pixels[i + 1] = bP(y_p*255 + 16); // Green
+                pixels[i + 2] = bP(y_p*255); // Blue
             }
-
             // pixels[i + 3] is alpha; leave it unchanged
         }
 
@@ -341,11 +337,22 @@ function drawAll(stroke=null, hoverPos = null) {
             }
         }
     }
-
     // border
     ctx.strokeStyle = '#1e2a55'; ctx.lineWidth = 2; ctx.strokeRect(0, 0, canvas.width, canvas.height);
 }
-function nP(pv) {
+function toSubtractive(r, g, b) {
+            let c = 1 - r
+            let m = 1 - g
+            let y = 1 - b
+            // const k = Math.min(c, m, y)
+            // c = (c-k)/(1-k)
+            // m = (m-k)/(1-k)
+            // y = (y-k)/(1-k)
+    return [c, m, y]
+}
+
+// bounded pixel to 0 - 255 
+function bP(pv) {
     return Math.max(0, Math.min(255, pv))
 }
 
@@ -536,6 +543,7 @@ function precision(v, p) {
 }
 
 // initial paint
+colorPicker.value = paintColor;
 drawAll();
 refreshList();
 setCanvasToHAL();

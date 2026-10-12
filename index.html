@@ -42,7 +42,7 @@
             border: 1px solid #2a3a77;
             color: var(--text);
             padding: .5rem .75rem;
-            border-radius: .6rem;
+            border-radius: .2rem;
             cursor: pointer
         }
 
@@ -89,14 +89,14 @@
         .card {
             background: var(--panel);
             border: 1px solid #1e2a55;
-            border-radius: 14px;
+            border-radius: 2px;
             padding: 12px
         }
 
         canvas {
             background: #0f1735;
             border: 1px solid #1e2a55;
-            border-radius: 12px;
+            border-radius: 2px;
             touch-action: none;
             display: block;
             width: 100%;
@@ -115,7 +115,7 @@
         .kbd {
             border: 1px solid #2a3a77;
             border-bottom-width: 3px;
-            border-radius: 6px;
+            border-radius: 1px;
             padding: .1rem .4rem;
             font-family: ui-monospace, Consolas, Menlo, monospace;
             color: #cfe4ff
@@ -125,13 +125,13 @@
             max-height: 200px;
             overflow: auto;
             border: 1px dashed #2a3a77;
-            border-radius: 10px;
+            border-radius: 1px;
             padding: 6px
         }
 
         .list div {
             padding: 6px;
-            border-radius: 8px;
+            border-radius: 1px;
             cursor: pointer
         }
 
@@ -143,7 +143,7 @@
         pre {
             background: #0a1129;
             border: 1px solid #1e2a55;
-            border-radius: 10px;
+            border-radius: 1px;
             padding: 8px;
             color: #cfe4ff
         }
@@ -161,6 +161,7 @@
             Upload image
             <input id="fileInput" type="file" accept="image/*" />
         </label>
+        <button id="whiteBalance" class="btn" aria-pressed="false" title="white balance">White Balance</button>
         <button id="toolDraw" class="btn" aria-pressed="true" title="Draw (D)">✏️ Draw</button>
         <button id="toolSelect" class="btn" aria-pressed="false" title="Select/Delete (S)">🧹 Select/Delete</button>
         <div class="row">
@@ -168,6 +169,22 @@
             <input id="width" type="range" min="1" max="12" value="1" />
             <output id="widthOut">3 px</output>
             <input  id="colorPicker" type="color" />
+        </div>
+        <div class="row">
+            <label for="hueTol">Hue Tolerance</label>
+            <input id="hueTol" type="range" min="0.0" max="1" step="0.01" value="0.05" style="width:100px" />
+            <label for="satTol">Saturation Tolerance</label>
+            <input id="satTol" type="range" min="0.0" max="1" step="0.01" value="0.5" style="width:100px" />
+            <label for="valTol">Value Tolerance</label>
+            <input id="valTol" type="range" min="0.0" max="1" step="0.01" value="0.5" style="width:100px" />
+        </div>
+        <div class="row">
+            <label for="hueFac">Hue Factor</label>
+            <input id="hueFac" type="range" min="0.0" max="1" step="0.01" value="0.05" style="width:100px" />
+            <label for="satFac">Saturation Factor</label>
+            <input id="satFac" type="range" min="0.0" max="1" step="0.01" value="0.5" style="width:100px" />
+            <label for="valFac">Value Factor</label>
+            <input id="valFac" type="range" min="0.0" max="1" step="0.01" value="0.5" style="width:100px" />
         </div>
         <div class="row">
             <label for="feed">Feed (F)</label>

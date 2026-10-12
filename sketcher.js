@@ -19,7 +19,7 @@ let img = new Image();
 let imgLoaded = false;
 let imgFileName = "none loaded";
 let imgScale = 1;
-let paintColor = "#ffdd00"
+let paintColor = "#ff7300"
 const fileInput = document.getElementById('fileInput');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
@@ -65,11 +65,18 @@ let lastPt = null;
 let pointStep = 1.5; // pixels between captured points
 // === UI wiring ===
 const el = id => document.getElementById(id);
+const whiteBalance = el('whiteBalance');
 const toolDraw = el('toolDraw');
 const toolSelect = el('toolSelect');
 const widthInput = el('width');
-const colorPicker = el('colorPicker');
 const widthOut = el('widthOut');
+const colorPicker = el('colorPicker');
+const hueTolInput = el('hueTol');
+const satTolInput = el('satTol');
+const valTolInput = el('valTol');
+const hueFacInput = el('hueFac');
+const satFacInput = el('satFac');
+const valFacInput = el('valFac');
 const feedInput = el('feed');
 const exportBtn = el('export');
 const undoBtn = el('undo');
@@ -79,12 +86,21 @@ const pointStepOut = el('pointStepOut');
 const HALNumberInput = el('HALNumber');
 const brushNumberInput = el('brushNumber');
 
+const originalCanvas = document.createElement("canvas");
+const originalCtx = originalCanvas.getContext("2d", {
+  willReadFrequently: true
+});
+
 function setImgParams() {
     const imgAspect = img.width / img.height
     const canvasAspect = canvas.width / canvas.height
     const difAspect = imgAspect - canvasAspect
     imgScale = (difAspect <= 0)? canvas.height / img.height:  canvas.width / img.width
     // console.log(imgAspect, canvasAspect, difAspect, imgScale)
+    originalCanvas.width = canvas.width; //image.naturalWidth;
+    originalCanvas.height = canvas.height; //image.naturalHeight;
+    originalCtx.drawImage(img, 0, 0, img.width, img.height, 0, 0, img.width*imgScale, img.height*imgScale);
+
 }
 
 fileInput.addEventListener('change', () => {
@@ -109,6 +125,7 @@ fileInput.addEventListener('change', () => {
 
 function setTool(next) {
     tool = next;
+    whiteBalance.setAttribute('aria-pressed', tool === 'whiteBalance');
     toolDraw.setAttribute('aria-pressed', tool === 'draw');
     toolSelect.setAttribute('aria-pressed', tool === 'select');
     canvas.style.cursor = tool === 'draw' ? 'crosshair' : 'pointer';
@@ -134,16 +151,48 @@ function scrollFunction() {
 }
 
 
-// header.onclick = () => expandHeader();
+whiteBalance.onclick = (e) => { 
+    setTool('whiteBalance')
+};
 toolDraw.onclick = (e) => { 
     setTool('draw')
-    shrinkHeader(e)
 };
 toolSelect.onclick = () => setTool('select');
 
 widthInput.addEventListener('input', () => {
     widthOut.textContent = widthInput.value + ' px';
 });
+let hueTol = 0.05
+hueTolInput.addEventListener('input', () => {
+    hueTol = hueTolInput.value;
+    drawAll()
+});
+let satTol = 0.5
+satTolInput.addEventListener('input', () => {
+    satTol = satTolInput.value;
+    drawAll()
+});
+let valTol = 0.5
+valTolInput.addEventListener('input', () => {
+    valTol = valTolInput.value;
+    drawAll()
+});
+let hueFac = 0.05
+hueFacInput.addEventListener('input', () => {
+    hueFac = hueFacInput.value;
+    drawAll()
+});
+let satFac = 0.5
+satFacInput.addEventListener('input', () => {
+    satFac = satFacInput.value;
+    drawAll()
+});
+let valFac = 0.5
+valFacInput.addEventListener('input', () => {
+    valFac = valFacInput.value;
+    drawAll()
+});
+
 pointStepInput.addEventListener('input', () => {
     pointStep = parseFloat(pointStepInput.value);
     pointStepOut.textContent = pointStep + ' px';
@@ -181,6 +230,7 @@ colorPicker.addEventListener("change", watchColorPicker);
 
 function watchColorPicker(event) {
   paintColor = event.target.value;
+  drawAll()
 }
 exportBtn.onclick = () => {
     const g = generateGCode(strokes, parseFloat(feedInput.value) || 800);
@@ -204,8 +254,43 @@ canvas.addEventListener('pointerdown', (e) => {
             drawing = true; canvas.setPointerCapture(e.pointerId);
             const stroke = { id: crypto.randomUUID(), color: paintColor, width: parseFloat(widthInput.value) | 0 || 3, points: [pos], selected: false };
             strokes.push(stroke);
-            lastPt = pos; drawAll(stroke); refreshList();
-        } else {
+            lastPt = pos; 
+            drawAll(stroke); refreshList();
+        } 
+        else if (tool === "whiteBalance") {
+            //const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const imageData = originalCtx.getImageData(
+                0, 0,
+                originalCanvas.width,
+                originalCanvas.height
+            );
+
+            const pixels = imageData.data;
+            const rp = red(paintColor)
+            const gp = green(paintColor)
+            const bp = blue(paintColor)
+            const [cp, mp, yp] = toSubtractive(rp, gp, bp)
+            const [hp, sp, vp] = rgbToHsv(rp, gp, bp)
+            // console.log("pos", pos)
+            const i = (Math.floor(pos.x) + Math.floor(pos.y)*imageData.width) * 4
+            const r = pixels[i]/255
+            const g = pixels[i+1]/255
+            const b = pixels[i+2]/255
+            const [c, m, y] = toSubtractive(r, g, b)
+            const [h, s, v] = rgbToHsv(r, g, b)
+            const paint_c = cp*c
+            const paint_m = mp*m
+            const paint_y = yp*y
+            const delta_h = ((degreeDiff(hp, h))/180)
+            const delta_s = 1-Math.abs(sp - s)
+            const delta_v = 1-Math.abs(vp - v)
+
+            console.log(r.toFixed(3), g.toFixed(3), b.toFixed(3), '--', imageData.width, canvas.width)
+            console.log(degreeDiff(hp, h).toFixed(3), delta_h.toFixed(3), delta_s.toFixed(3), delta_v.toFixed(3))
+
+
+        } 
+        else {
             // select nearest stroke to click
             selectNearest(pos);
         }
@@ -286,37 +371,47 @@ function drawAll(stroke=null, hoverPos = null) {
     }
     else { // display image, filtered by color then draw all strokes
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "#fefefe";
+        ctx.fillStyle = "#ff00ff";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, img.width*imgScale, img.height*imgScale);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const pixels = imageData.data;
+        if(imgLoaded) {
+            //ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, img.width*imgScale, img.height*imgScale);
+            //const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            // Fetch a fresh pixel buffer.
+            const imageData = originalCtx.getImageData(
+                0, 0,
+                originalCanvas.width,
+                originalCanvas.height
+            );
+            console.log('length', imageData.data.length)
+            const pixels = imageData.data;
+            const rp = red(paintColor)
+            const gp = green(paintColor)
+            const bp = blue(paintColor)
+            const [cp, mp, yp] = toSubtractive(rp, gp, bp)
+            const [hp, sp, vp] = rgbToHsv(rp, gp, bp)
+            console.log('hsv picked', hp.toFixed(2), sp.toFixed(2), vp.toFixed(2))
+            for (let i = 0; i < pixels.length; i += 4) {
+                const r = pixels[i]/255
+                const g = pixels[i+1]/255
+                const b = pixels[i+2]/255
+                // const [c, m, y] = toSubtractive(r, g, b)
+                const [h, s, v] = rgbToHsv(r, g, b)
+                
+                const delta_h = degreeDiff(hp, h)/180 // 0 - 1
+                const delta_s = Math.abs(sp - s)
+                const delta_v = Math.abs(vp - v)
 
-        const blue = true;
-        for (let i = 0; i < pixels.length; i += 4) {
-            const r = pixels[i]/255
-            const g = pixels[i+1]/255
-            const b = pixels[i+2]/255
-            const [c, m, y] = toSubtractive(r, g, b)
-            const b_paint = c*0.8 + m*0.2 // (c + m)/2
-            const y_paint = y*0.9 + m*0.1
-            const y_p = 1-y_paint 
-            const b_p = 1-b_paint 
-            if (blue) {
-                pixels[i] =     bP(b_p*255); // Red
-                pixels[i + 1] = bP(b_p*255); // Green
-                pixels[i + 2] = bP(b_p*255 + 32); // Blue
+                const val = delta_h < hueTol && s > satTol && v > valTol ? delta_h*(1-s)+(v*valFac): 1
+
+                const [light_r, light_g, light_b] = hsvToRgb(h, s, v)
+                pixels[i] =     bP(val*255); // Red
+                pixels[i + 1] = bP(val*255); // Green
+                pixels[i + 2] = bP(val*255); // Blue
+                // pixels[i + 3] is alpha; leave it unchanged
             }
-            else {
-                pixels[i] =     bP(y_p*255 + 32); // Red
-                pixels[i + 1] = bP(y_p*255 + 16); // Green
-                pixels[i + 2] = bP(y_p*255); // Blue
-            }
-            // pixels[i + 3] is alpha; leave it unchanged
+
+            ctx.putImageData(imageData, 0, 0);
         }
-
-        ctx.putImageData(imageData, 0, 0);
-
         for (const s of strokes) {
             paint(s)
         }
@@ -341,15 +436,137 @@ function drawAll(stroke=null, hoverPos = null) {
     ctx.strokeStyle = '#1e2a55'; ctx.lineWidth = 2; ctx.strokeRect(0, 0, canvas.width, canvas.height);
 }
 function toSubtractive(r, g, b) {
-            let c = 1 - r
-            let m = 1 - g
-            let y = 1 - b
-            // const k = Math.min(c, m, y)
-            // c = (c-k)/(1-k)
-            // m = (m-k)/(1-k)
-            // y = (y-k)/(1-k)
+    let c = 1 - r
+    let m = 1 - g
+    let y = 1 - b
+    // const k = Math.min(c, m, y)
+    // c = (c-k)/(1-k)
+    // m = (m-k)/(1-k)
+    // y = (y-k)/(1-k)
     return [c, m, y]
 }
+
+function rgbToHsv(r, g, b) {
+//   r /= 255;
+//   g /= 255;
+//   b /= 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+
+  let h = 0;
+
+  if (delta !== 0) {
+    if (max === r) {
+      h = 60 * (((g - b) / delta) % 6);
+    } else if (max === g) {
+      h = 60 * ((b - r) / delta + 2);
+    } else {
+      h = 60 * ((r - g) / delta + 4);
+    }
+  }
+
+  if (h < 0) h += 360;
+
+  const s = max === 0 ? 0 : delta / max;
+  const v = max;
+
+  return [h, s, v];
+}
+// console.log(rgbToHsv(1, 1, 0), 'yellow');
+// console.log(rgbToHsv(0, 1, 1), 'cyan');
+// console.log(rgbToHsv(1, 0, 1), 'magenta');
+// console.log(rgbToHsv(0, 0, 0), 'black');
+// console.log(rgbToHsv(1, 1, 1), 'white');
+// console.log(rgbToHsv(.2, .4, .2), 'greenish');
+
+function hsvToRgb(h, s, v) {
+  h = ((h % 1) + 1) % 1; // Hue wraps around; all inputs are 0–1
+
+  const i = Math.floor(h * 6);
+  const f = h * 6 - i;
+  const p = v * (1 - s);
+  const q = v * (1 - f * s);
+  const t = v * (1 - (1 - f) * s);
+
+  switch (i % 6) {
+    case 0: return [v, t, p];
+    case 1: return [q, v, p];
+    case 2: return [p, v, t];
+    case 3: return [p, q, v];
+    case 4: return [t, p, v];
+    default: return [v, p, q];
+  }
+}
+
+// Example: red, yellow...
+// console.log(hsvToRgb(0, 1, 1), '[1, 0, 0]'); // [1, 1, 0]
+// console.log(hsvToRgb(1 / 6, 1, 1), '[1, 1, 0]'); // [1, 1, 0]
+// console.log(hsvToRgb(2 / 6, 1, 1), '[0, 1, 0]');
+// console.log(hsvToRgb(3 / 6, 1, 1), '[0, 1, 1]');
+// console.log(hsvToRgb(4 / 6, 1, 1), '[0, 0, 1]');
+// console.log(hsvToRgb(5 / 6, 1, 1), '[1, 0, 1]');
+// console.log(hsvToRgb(1, 1, 1), '[1, 0, 0]');
+
+function degreeDiff(a, b) {
+  return Math.abs(((b - a + 540) % 360) - 180);
+}
+// console.log(degreeDiff(350, 10), 20)
+// console.log(degreeDiff(10, 350), 20)
+// console.log(degreeDiff(0, 185), 175)
+// console.log(degreeDiff(350, 370), 20)
+
+function red(color) {
+  const hex = color.startsWith("#") ? color.slice(1) : color;
+
+  // Support #RGB and #RRGGBB
+  const redHex = hex.length === 3 ? hex[0] + hex[0] : hex.slice(0, 2);
+  const red = Number.parseInt(redHex, 16);
+
+  if (!/^[0-9a-fA-F]{1,2}$/.test(redHex) || Number.isNaN(red)) {
+    throw new Error("Expected a CSS hex color such as #ffff00");
+  }
+
+  return red / 255;
+}
+// console.log('red', red('#80ff00'))
+// console.log('red', red('#f8f'))
+// console.log('red', red('#000080'))
+
+function green(color) {
+  const hex = color.startsWith("#") ? color.slice(1) : color;
+
+  // Support #RGB and #RRGGBB
+  const cHex = hex.length === 3 ? hex[1] + hex[1] : hex.slice(2, 4);
+  const c = Number.parseInt(cHex, 16);
+
+  if (!/^[0-9a-fA-F]{1,2}$/.test(cHex) || Number.isNaN(c)) {
+    console.log("bad value", cHex, c)
+    //throw new Error("Expected a CSS hex color such as #ffff00");
+  }
+
+  return c / 255;
+}
+// console.log('green', green('#80ff00'))
+// console.log('green', green('#f8f'))
+// console.log('green', green('#000080'))
+function blue(color) {
+  const hex = color.startsWith("#") ? color.slice(1) : color;
+
+  // Support #RGB and #RRGGBB
+  const cHex = hex.length === 3 ? hex[2] + hex[2] : hex.slice(4, 6);
+  const c = Number.parseInt(cHex, 16);
+
+  if (!/^[0-9a-fA-F]{1,2}$/.test(cHex) || Number.isNaN(c)) {
+    throw new Error("Expected a CSS hex color such as #ffff00");
+  }
+
+  return c / 255;
+}
+// console.log('blue', blue('#80ff00'))
+// console.log('blue', blue('#f8f'))
+// console.log('blue', blue('#000080'))
 
 // bounded pixel to 0 - 255 
 function bP(pv) {

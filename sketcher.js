@@ -284,6 +284,7 @@ canvas.addEventListener('pointerdown', (e) => {
             const delta_h = ((degreeDiff(hp, h))/180)
             const delta_s = 1-Math.abs(sp - s)
             const delta_v = 1-Math.abs(vp - v)
+            console.log(oklab_to_okLCh(linear_srgb_to_oklab([r, g, b])))
 
             console.log(r.toFixed(3), g.toFixed(3), b.toFixed(3), '--', imageData.width, canvas.width)
             console.log(degreeDiff(hp, h).toFixed(3), delta_h.toFixed(3), delta_s.toFixed(3), delta_v.toFixed(3))
@@ -386,18 +387,18 @@ function drawAll(stroke=null, hoverPos = null) {
             const pixels = imageData.data;
             const rp = red(paintColor)
             const gp = green(paintColor)
-            const bp = blue(paintColor)
-            const [cp, mp, yp] = toSubtractive(rp, gp, bp)
-            const [hp, sp, vp] = rgbToHsv(rp, gp, bp)
-            console.log('hsv picked', hp.toFixed(2), sp.toFixed(2), vp.toFixed(2))
+            const bp = blue(paintColor);
+            const [vp, sp, hp] = oklab_to_okLCh(linear_srgb_to_oklab([rp, gp, bp]))
+
+            // console.log('hsv picked', hp.toFixed(2), sp.toFixed(2), vp.toFixed(2))
             for (let i = 0; i < pixels.length; i += 4) {
                 const r = pixels[i]/255
                 const g = pixels[i+1]/255
                 const b = pixels[i+2]/255
-                // const [c, m, y] = toSubtractive(r, g, b)
-                const [h, s, v] = rgbToHsv(r, g, b)
-                
-                const delta_h = degreeDiff(hp, h)/180 // 0 - 1
+
+                // const [h, s, v] = rgbToHsv(r, g, b)
+                const [v, s, h] = oklab_to_okLCh(linear_srgb_to_oklab([r, g, b]))
+                const delta_h = radianDiff(hp, h)/Math.PI // 0 - 1
                 const delta_s = Math.abs(sp - s)
                 const delta_v = Math.abs(vp - v)
 
@@ -516,6 +517,14 @@ function degreeDiff(a, b) {
 // console.log(degreeDiff(10, 350), 20)
 // console.log(degreeDiff(0, 185), 175)
 // console.log(degreeDiff(350, 370), 20)
+
+function radianDiff(a, b) {
+  return Math.abs(((b - a + Math.PI*3) % (Math.PI*2)) - Math.PI);
+}
+// console.log(radianDiff(Math.PI/4, Math.PI/2), Math.PI/4)
+// console.log(radianDiff(-Math.PI/4, Math.PI/4), Math.PI/2)
+// console.log(radianDiff(0, Math.PI-Math.PI/4), Math.PI/4*3)
+// console.log(radianDiff(Math.PI*2-Math.PI/4, Math.PI*2+Math.PI/4), Math.PI-Math.PI/2)
 
 function red(color) {
   const hex = color.startsWith("#") ? color.slice(1) : color;
@@ -872,3 +881,51 @@ function cumulativeLengths(points) {
     return { L, total: L[L.length - 1] || 0 };
 }
 
+// console.log(oklab_to_okLCh(linear_srgb_to_oklab(r, g, b)))
+// https://bottosson.github.io/posts/oklab/
+// Copyright (c) 2020 Björn Ottosson
+function oklab_to_okLCh ([L, a, b]) {
+    const C = Math.hypot(a, b)
+    const h = Math.atan2(b, a)
+    return [L, C, h]
+}
+function okLCh_to_oklab ([L, C, h]) {
+    const a = C*Math.cos(h)
+    const b = C*Math.sin(h)
+    return [L, a, b]
+}
+// Lab [L, a, b];
+// RGB [r, g, b];
+// RGB -> linear_srgb_to_oklab -> Lab
+function linear_srgb_to_oklab([r, g, b]) {
+    const l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+	const m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+	const s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+
+    const l_ = Math.cbrt(l); // cuberoot
+    const m_ = Math.cbrt(m);
+    const s_ = Math.cbrt(s);
+
+    return [
+        0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,
+        1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
+        0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_
+    ];
+}
+
+// Lab -> oklab_to_linear_srgb -> RGB
+function oklab_to_linear_srgb([L, a, b]) {
+    const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+    const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+    const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+
+    const l = l_*l_*l_; // cube
+    const m = m_*m_*m_;
+    const s = s_*s_*s_;
+
+    return [
+		4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+		-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+		-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+    ];
+}

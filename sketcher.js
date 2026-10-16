@@ -19,10 +19,16 @@ let img = new Image();
 let imgLoaded = false;
 let imgFileName = "none loaded";
 let imgScale = 1;
+let updatedCanvasData = null;
 let paintColor = "#ff7300"
 const fileInput = document.getElementById('fileInput');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
+const originalCanvas = document.getElementById('originalCanvas');
+const originalCtx = originalCanvas.getContext("2d", {
+    willReadFrequently: true
+});
+
 // const marksDiv = document.getElementById('marks');
 
 const HAL = [ // v (vertical) note a negative value indicates the paper is not at 0, but instead at -v 
@@ -86,8 +92,12 @@ const pointStepOut = el('pointStepOut');
 const HALNumberInput = el('HALNumber');
 const brushNumberInput = el('brushNumber');
 
-const originalCanvas = document.createElement("canvas");
-const originalCtx = originalCanvas.getContext("2d", {
+// const originalCanvas = document.createElement("canvas");
+// const originalCtx = originalCanvas.getContext("2d", {
+//     willReadFrequently: true
+// });
+const filteredCanvas = document.createElement("canvas");
+const filteredCtx = filteredCanvas.getContext("2d", {
   willReadFrequently: true
 });
 
@@ -99,6 +109,8 @@ function setImgParams() {
     // console.log(imgAspect, canvasAspect, difAspect, imgScale)
     originalCanvas.width = canvas.width; //image.naturalWidth;
     originalCanvas.height = canvas.height; //image.naturalHeight;
+    filteredCanvas.width = canvas.width; 
+    filteredCanvas.height = canvas.height;
     originalCtx.drawImage(img, 0, 0, img.width, img.height, 0, 0, img.width*imgScale, img.height*imgScale);
 
 }
@@ -162,17 +174,17 @@ toolSelect.onclick = () => setTool('select');
 widthInput.addEventListener('input', () => {
     widthOut.textContent = widthInput.value + ' px';
 });
-let hueTol = 0.05
+let hueTol = 0.5
 hueTolInput.addEventListener('input', () => {
     hueTol = hueTolInput.value;
     drawAll()
 });
-let satTol = 0.5
+let satTol = 0.0
 satTolInput.addEventListener('input', () => {
     satTol = satTolInput.value;
     drawAll()
 });
-let valTol = 0.5
+let valTol = 0.05
 valTolInput.addEventListener('input', () => {
     valTol = valTolInput.value;
     drawAll()
@@ -187,7 +199,7 @@ satFacInput.addEventListener('input', () => {
     satFac = satFacInput.value;
     drawAll()
 });
-let valFac = 0.5
+let valFac = 0.05
 valFacInput.addEventListener('input', () => {
     valFac = valFacInput.value;
     drawAll()
@@ -214,10 +226,14 @@ function setCanvasToHAL() {
     const w = Math.abs(HAL[hali].w*2)
     canvas.width = w
     canvas.style.width = `${w}px`
+    originalCanvas.width = w
+    originalCanvas.style.width = `${w}px`
     //console.log(w)
     const h = Math.abs(HAL[hali].h*2)
     canvas.height = h
     canvas.style.height = `${h}px`
+    originalCanvas.height = h
+    originalCanvas.style.height = `${h}px`
     //console.log(h)
 }
 function setCanvasToBrush() {
@@ -226,10 +242,11 @@ function setCanvasToBrush() {
 
 undoBtn.onclick = () => { if (strokes.length) { strokes.pop(); selectedId = null; drawAll(); refreshList(); } };
 clearBtn.onclick = () => { if (confirm('Clear all marks?')) { strokes = []; selectedId = null; drawAll(); refreshList(); } };
-colorPicker.addEventListener("change", watchColorPicker);
+colorPicker.addEventListener("input", watchColorPicker);
 
 function watchColorPicker(event) {
   paintColor = event.target.value;
+  // console.log(event.target.value);
   drawAll()
 }
 exportBtn.onclick = () => {
@@ -332,6 +349,13 @@ function getPos(e) {
 }
 
 function paint(s, c = "#ffffff") {
+    const updatedCanvasImg = filteredCtx.getImageData(
+        0, 0,
+        canvas.width,
+        canvas.height
+    );
+    updatedCanvasData = updatedCanvasImg.data;
+
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.lineWidth = s.width;
     ctx.strokeStyle = s.id === selectedId ? '#8ef' : s.color;
@@ -345,7 +369,7 @@ function paint(s, c = "#ffffff") {
     let lastY = pts[0].y
     for (let i = 1; i < pts.length; i++) {
         const t = i/pts.length
-        ctx.lineWidth = pointerHasPressure ? s.width * 2 * pts[i].press: zProfile(t, 0, s.width)
+        ctx.lineWidth = pointerHasPressure ? s.width * 2 * pts[i].press: zProfile(t, 0, s.width, pts[i])
         // console.log(t, ctx.lineWidth)
         ctx.beginPath();
         ctx.moveTo(lastX, lastY);
@@ -383,7 +407,7 @@ function drawAll(stroke=null, hoverPos = null) {
                 originalCanvas.width,
                 originalCanvas.height
             );
-            console.log('length', imageData.data.length)
+            // console.log('length', imageData.data.length)
             const pixels = imageData.data;
             const rp = red(paintColor)
             const gp = green(paintColor)
@@ -411,7 +435,8 @@ function drawAll(stroke=null, hoverPos = null) {
                 // pixels[i + 3] is alpha; leave it unchanged
             }
 
-            ctx.putImageData(imageData, 0, 0);
+            filteredCtx.putImageData(imageData, 0, 0);
+            ctx.putImageData(imageData, 0, 0)
         }
         for (const s of strokes) {
             paint(s)
@@ -657,16 +682,26 @@ function inBounds(pt3) {
     return [ x, y, z ]
 }
 
-function zPressure(pressure) {
-    return lerp(ztop(), zbottom(), pressure)
+function pointColorAt(p) {
+    const i = (Math.round(p.x) + Math.round(p.y)*canvas.width) * 4
+    const r = updatedCanvasData[i]/255
+    const g = updatedCanvasData[i+1]/255
+    const b = updatedCanvasData[i+2]/255
+    return (r+g+b)/3
 }
 
-function zProfile(t, top, bot) {
+function zPressure(pressure, p) {
+    const darkness = 1 - pointColorAt(p)
+    return lerp(ztop(), zbottom(), pressure*darkness)
+}
+
+function zProfile(t, top, bot, p) {
     // t in [0,1]: 0-0.25: 0->4; 0.25-0.75: hold 4; 0.75-1: 4->0
     // console.log(t, t / descent, (1 - t) / (1 - ascent))
-    if (t <= descent) return lerp(top, bot, t / descent); // top..bottom
-    if (t >= ascent) return lerp(top, bot, (1 - t) / (1 - ascent)); // bottom..top
-    return bot;
+    const darkness = 1 - pointColorAt(p)
+    if (t <= descent) return lerp(top, bot, (t / descent)*darkness); // top..bottom
+    if (t >= ascent) return lerp(top, bot, ((1 - t) / (1 - ascent))*darkness); // bottom..top
+    return lerp(top, bot, darkness);
 }
 
 function generateGCode(strokes, feed) {
@@ -677,22 +712,27 @@ function generateGCode(strokes, feed) {
     lines.push('G90 ; absolute positioning');
     lines.push(`G0 Z${zsafe().toFixed(2)}`);
     lines.push('G0 X0 Y0');
-
+    const updatedCanvasImg = filteredCtx.getImageData(
+        0, 0,
+        canvas.width,
+        canvas.height
+    );
+    updatedCanvasData = updatedCanvasImg.data;
     const hasAAxis = HAL[hali].hasAAxis
     if (hasAAxis) {
         lines.push('G0 A0');
     }
 
     initBrushMachineRotation()
-    lastColor = null
+    let lastColor = null
     let i = -1
     strokes.forEach((s) => {
         if (!s.points || s.points.length < 5) return;
-        const pts = smooth2D(smooth2D(smooth2D(s.points.map(pxToMm))));
-        const { L, total } = cumulativeLengths(pts);
+        const pts = smooth2D(smooth2D(smooth2D(s.points)));
+        const { L, total } = cumulativeLengths(pts.map(pxToMm));
         if (total <= 0) return;
 
-        const start = pts[0];
+        const start = pxToMm(pts[0]);
         i += 1
 
         if (HAL[hali].brush[brushi].shape !== 'pen' && (i % 3 === 0 || lastColor !== s.color)) {
@@ -711,8 +751,10 @@ function generateGCode(strokes, feed) {
         lastColor = s.color
         lines.push(`\n; ---- Mark ${i + 1} ----`);
         lines.push(`G0 Z${zclear().toFixed(2)}`);
+        const pts0 = pxToMm(pts[0])
+        const pts1 = pxToMm(pts[1])
         if (hasAAxis) {
-            const r = angle(pts[1].x - pts[0].x, pts[1].y - pts[0].y)
+            const r = angle(pts1.x - pts0.x, pts1.y - pts0.y)
             const [x, y, z] = inBounds(offsetPt(start.x, start.y, zclear(), r))
             const a = brushMachineRotation(r)
             lines.push(`G0 X${x.toFixed(2)} Y${y.toFixed(2)} Z${(z+5).toFixed(2)} A${a.toFixed(1)}`);
@@ -722,15 +764,16 @@ function generateGCode(strokes, feed) {
         }
         const pointerHasPressure = (s.points[0].press !== 0.5)
 
-        let prevAngle = brushMachineRotation(angle(pts[1].x - pts[0].x, pts[1].y - pts[0].y))
+        let prevAngle = brushMachineRotation(angle(pts1.x - pts0.x, pts1.y - pts0.y))
         for (let i = 1; i < pts.length; i++) {
-
+            const p = pxToMm(pts[i]);
             const t = L[i] / total; // 0..1 progress along this mark
-            const pz = pointerHasPressure? zPressure(s.points[i].press) : zProfile(t, ztop(), zbottom());
+            const pz = pointerHasPressure? zPressure(s.points[i].press, pts[i]) : zProfile(t, ztop(), zbottom(), pts[i]);
             // console.log(t, pz)
-            const p = pts[i];
+            
             if (hasAAxis) {
-                let r = angle(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y)
+                const prevP = pxToMm(pts[i-1]);
+                let r = angle(p.x - prevP.x, p.y - prevP.y)
                 const [x, y, z] = inBounds(offsetPt(p.x, p.y, pz, r))
                 const a = brushMachineRotation(r)
                 const f = rotAdjustedFeedRate(prevAngle - a, feed)

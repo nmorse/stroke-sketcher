@@ -172,11 +172,11 @@
         </div>
         <div class="row">
             <label for="hueTol">Hue Tolerance</label>
-            <input id="hueTol" type="range" min="0.0" max="1" step="0.01" value="0.05" style="width:100px" />
+            <input id="hueTol" type="range" min="0.0" max="1" step="0.01" value="0.5" style="width:100px" />
             <label for="satTol">Saturation Tolerance</label>
-            <input id="satTol" type="range" min="0.0" max="1" step="0.01" value="0.5" style="width:100px" />
+            <input id="satTol" type="range" min="0.0" max="1" step="0.01" value="0.0" style="width:100px" />
             <label for="valTol">Value Tolerance</label>
-            <input id="valTol" type="range" min="0.0" max="1" step="0.01" value="0.5" style="width:100px" />
+            <input id="valTol" type="range" min="0.0" max="1" step="0.01" value="0.03" style="width:100px" />
         </div>
         <div class="row">
             <label for="hueFac">Hue Factor</label>
@@ -211,6 +211,10 @@
         <section class="card">
             <!-- Canvas is set so that its pixel width maps to 150mm and height to 100mm -->
             <canvas id="canvas" width="720" height="600"></canvas>
+        </section>
+        <section class="card">
+            <!-- Canvas is set so that its pixel width maps to 150mm and height to 100mm -->
+            <canvas id="originalCanvas" width="720" height="600"></canvas>
         </section>
     </main>
     <script type="module" src="sketcher.js"></script>

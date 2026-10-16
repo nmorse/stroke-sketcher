@@ -836,16 +836,10 @@ function angle(dx, dy) {
 function offsetPt(ox, oy, oz, brushRotation) {
     const brushAngle = 0.79 // 0.79 radians (45 degrees)
     const brushLengthMm = 30
-	bx = Math.cos(brushRotation) * Math.sin(brushAngle) * brushLengthMm;
-	by = Math.sin(brushRotation) * Math.sin(brushAngle) * brushLengthMm;
-	bz = Math.cos(brushAngle) * brushLengthMm;
+	const bx = Math.cos(brushRotation) * Math.sin(brushAngle) * brushLengthMm;
+	const by = Math.sin(brushRotation) * Math.sin(brushAngle) * brushLengthMm;
+	const bz = Math.cos(brushAngle) * brushLengthMm;
     return [ox+bx, oy+by, oz+bz]
-}
-
-function setMachineBrushOffset(brushOffset, brushRotation, brushAngle, brushLengthMm) {
-	bx = Math.cos(brushRotation) * Math.sin(brushAngle) * brushLengthMm;
-	by = Math.sin(brushRotation) * Math.sin(brushAngle) * brushLengthMm;
-	bz = Math.cos(brushAngle) * brushLengthMm;
 }
 
 let last_br_deg = 0;

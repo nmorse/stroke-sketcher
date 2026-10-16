@@ -426,7 +426,7 @@ function drawAll(stroke=null, hoverPos = null) {
                 const delta_s = Math.abs(sp - s)
                 const delta_v = Math.abs(vp - v)
 
-                const val = delta_h < hueTol && s > satTol && v > valTol ? delta_h*(1-s)+(v*valFac): 1
+                const val = delta_h < hueTol && s > satTol && v > valTol ? delta_h*hueFac+(1-s)*satFac+(v*valFac): 1
 
                 const [light_r, light_g, light_b] = hsvToRgb(h, s, v)
                 pixels[i] =     bP(val*255); // Red

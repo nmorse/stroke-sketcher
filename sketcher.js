@@ -749,7 +749,7 @@ function generateGCode(strokes, feed) {
             lines.push(`G1 Z${zclear().toFixed(2)} F${feed}`);
         }
         lastColor = s.color
-        lines.push(`\n; ---- Mark ${i + 1} ----`);
+        lines.push(`\n; ---- Mark ${i + 1}, implement[${brushi}] ${HAL[hali].brush[brushi].shape}, color ${s.color} ----`);
         lines.push(`G0 Z${zclear().toFixed(2)}`);
         const pts0 = pxToMm(pts[0])
         const pts1 = pxToMm(pts[1])

@@ -834,8 +834,8 @@ function angle(dx, dy) {
 
 // [x, y, z, f] = offsetPt(p.x, p.y, pz, r)
 function offsetPt(ox, oy, oz, brushRotation) {
-    brushAngle = 0.79 // 0.79 radians (45 degrees)
-    brushLengthMm = 30
+    const brushAngle = 0.79 // 0.79 radians (45 degrees)
+    const brushLengthMm = 30
 	bx = Math.cos(brushRotation) * Math.sin(brushAngle) * brushLengthMm;
 	by = Math.sin(brushRotation) * Math.sin(brushAngle) * brushLengthMm;
 	bz = Math.cos(brushAngle) * brushLengthMm;

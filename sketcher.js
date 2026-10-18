@@ -785,7 +785,8 @@ function generateGCode(strokes, feed) {
             }
         }
         // ensure end at Z is pen up 
-        const [endx, endy, _endz] = inBounds([pts[pts.length - 1].x, pts[pts.length - 1].y, pts[pts.length - 1].z]);
+        const end = pxToMm(pts[pts.length - 1]);
+        const [endx, endy, _endz] = inBounds([end.x, end.y, end.z]);
         lines.push(`G1 X${endx.toFixed(2)} Y${endy.toFixed(2)} Z${zclear().toFixed(2)} F${feed.toFixed(0)}`);
         // lines.push(`G0 Z${zclear().toFixed(3)}`);
     });

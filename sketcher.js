@@ -768,7 +768,7 @@ function generateGCode(strokes, feed) {
         for (let i = 1; i < pts.length; i++) {
             const p = pxToMm(pts[i]);
             const t = L[i] / total; // 0..1 progress along this mark
-            const pz = pointerHasPressure? zPressure(s.points[i].press ?? 0.1, pts[i]) : zProfile(t, ztop(), zbottom(), pts[i]);
+            const pz = pointerHasPressure? zPressure(s.points[i]?.press ?? 0.1, pts[i]) : zProfile(t, ztop(), zbottom(), pts[i]);
             // console.log(t, pz)
             
             if (hasAAxis) {
